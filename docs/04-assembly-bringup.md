@@ -199,7 +199,9 @@ flip. This also tells you the sensor ordering, which line-following depends on.
 
 ## Then: camera and demos
 
-Covered in Phase 5. Before starting the full stack, re-run the power check **with the robot
+Covered in **[`06-running-the-demos.md`](06-running-the-demos.md)** — read it first. There is a
+trap there: the `Functions/` demos all call `cv2.imshow()` and need a display, while
+`TurboPi.py` is fully headless. That doc explains how to get a display without an HDMI cable. Before starting the full stack, re-run the power check **with the robot
 assembled and running on battery** — this is the configuration where the USB current budget
 actually bites, and the bench result doesn't predict it:
 

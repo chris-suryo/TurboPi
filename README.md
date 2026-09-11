@@ -51,6 +51,18 @@ Background and how to read the results:
 
 ---
 
+## Start here
+
+1. **Send the image request to Hiwonder** — [`docs/image-request-email.md`](docs/image-request-email.md).
+   Only item with external lead time; nothing else waits on it.
+2. **Open the kit box.** Is there a microSD card? Photograph the expansion board silkscreen
+   (it identifies which board revision, which decides which SDK applies).
+3. **Flash stock Raspberry Pi OS** to your own card — [`docs/03-headless-boot.md`](docs/03-headless-boot.md).
+   Username **`pi`**, SSH enabled, Wi-Fi preconfigured.
+4. **SSH in and run** `./check_power.sh --stress`.
+
+---
+
 ## Current status
 
 | Phase | State |
@@ -60,7 +72,7 @@ Background and how to read the results:
 | 2. Physical fit check (52Pi case, RTC battery, board revision) | Pending |
 | 3. Flash TurboPi image, headless boot | Pending |
 | 4. Assemble and drive | Pending |
-| 5. Camera and built-in demos | Pending |
+| 5. Camera and built-in demos | Pending — note the display caveat in `docs/06-running-the-demos.md` |
 | 6. Concepts | Written, read as you go |
 
 **The image is the real blocker.** Hiwonder don't publish it — their docs ask you to email
@@ -80,6 +92,8 @@ source) is documented and viable.
 | [`docs/03-headless-boot.md`](docs/03-headless-boot.md) | Flashing and SSH with no monitor |
 | [`docs/04-assembly-bringup.md`](docs/04-assembly-bringup.md) | Staged bring-up — one subsystem at a time |
 | [`docs/05-concepts.md`](docs/05-concepts.md) | GPIO/PWM, servos, mecanum kinematics, I2C vs UART |
+| [`docs/06-running-the-demos.md`](docs/06-running-the-demos.md) | Which demos need a display, and how to get one without HDMI |
+| [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
 | [`scripts/check_power.sh`](scripts/check_power.sh) | Power verification. Run on the Pi |
 | [`scripts/check_hardware.py`](scripts/check_hardware.py) | Probes serial, I2C, gpiochip, camera. Run on the Pi |
 | [`NOTES-dog-cam-integration.md`](NOTES-dog-cam-integration.md) | One parked finding. No code |

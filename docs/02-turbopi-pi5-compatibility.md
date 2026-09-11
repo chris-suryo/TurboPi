@@ -113,9 +113,22 @@ default passwords above are the quickest way to tell which one you have.
 ### If Hiwonder doesn't come through
 
 Build from clean Raspberry Pi OS Bookworm 64-bit. This is a genuine fallback, not a
-consolation prize: the application source is public on GitHub and every dependency is an
-ordinary package — `opencv`, `mediapipe`, `pyserial`, `smbus2`, `gpiod`, `numpy`, `pyyaml`.
+consolation prize. The application source is public on GitHub, and every third-party import in
+the codebase has been enumerated, so the dependency set is known rather than guessed:
 
-You would own: enabling I2C and UART, disabling the serial console, creating the `pi` user,
-placing the source at `/home/pi/TurboPi`, and fixing the `gpiochip4` reference. That is an
-evening, not a project. It is more work than Path A, so we only take it if forced.
+```
+opencv-python  numpy  mediapipe  pyserial  smbus2  gpiod
+PyYAML  pillow  pyzbar  pandas  json-rpc  werkzeug
+```
+
+`pyzbar` additionally needs the system package `libzbar0`. `mediapipe` on arm64 is the one
+most likely to give you trouble — pin it rather than taking whatever pip resolves.
+
+You would also own: enabling I2C and UART, disabling the serial console, creating the `pi`
+user, placing the source at `/home/pi/TurboPi`, and fixing the `gpiochip4` reference. That is
+an evening, not a project — but more work than Path A, so we only take it if forced.
+
+**What the image gives you that the public repo doesn't:** `hiwonder-toolbox` (their Wi-Fi
+AP/STA manager — `wifi_conf.py` plus `hw_wifi.service`), a pinned known-good kernel,
+preinstalled dependencies, and VNC already configured. Of those, the Wi-Fi toolbox is the only
+piece with no public equivalent, and plain NetworkManager covers the same need.

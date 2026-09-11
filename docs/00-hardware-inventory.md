@@ -28,6 +28,10 @@ Three columns matter here: what you have, what has been **verified**, and what i
 4. **Which expansion board revision?** Current source uses a *serial* controller board; older
    TurboPi revisions differ. Determined by looking at the board in Phase 2.
 5. **Does the 52Pi case physically fit the build?** Offer the parts up before committing.
+6. **Is SSH enabled by default on the Hiwonder image?** Unverified. Their docs demonstrate VNC
+   throughout and never show an SSH login, so this is treated as unknown rather than assumed.
+   If SSH is off, VNC is the way in and we enable SSH from there. See
+   `06-running-the-demos.md` — VNC is wanted for the demos regardless, and needs no HDMI.
 
 ## Known constraints
 
