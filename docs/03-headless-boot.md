@@ -8,6 +8,63 @@ belongs in, because a command run in the wrong shell is a wasted hour.
 
 ---
 
+## First: what you're actually doing
+
+### What an "image" is
+
+A disk image is a **byte-for-byte copy of an entire configured disk** — bootloader,
+filesystem, OS, installed packages, config files, everything. It is not an installer. You
+don't run it; you *write* it onto the SD card, and the card then **becomes** that disk.
+
+That's why hardware vendors ship them. Rather than documenting forty setup steps, Hiwonder
+configure one Pi until the robot works, clone the whole card to a `.img` file, and hand you
+the clone. Convenient, but opaque — you inherit their choices without seeing them, and the
+clone is frozen at whatever date they made it.
+
+Raspberry Pi OS is distributed as an image too. The difference is that **Raspberry Pi Imager
+customises it as it writes** — you give it a hostname, username, Wi-Fi credentials and SSH
+setting, and it injects those into the image before the card is ejected. That single feature
+is what makes a headless first boot possible: the Pi comes up already knowing your Wi-Fi and
+already accepting SSH, so it never needs a monitor.
+
+One practical consequence worth knowing: **stock Raspberry Pi OS is not board-specific.** The
+same arm64 image boots a Pi 3, 4 or 5, so the card is largely portable if you change boards
+later. Vendor images usually *are* board-specific — which is exactly why Hiwonder maintain
+separate Pi 4B and Pi 5 builds with different passwords.
+
+### The four layers you're assembling
+
+Setting up a Pi is not one step, it's four. Keeping them separate makes failures much easier
+to diagnose, because you'll know which layer broke.
+
+| Layer | What it is | Where |
+|---|---|---|
+| **1. The card** | The SD card is the Pi's hard drive. Flashing = installing the OS | `03` (this doc) |
+| **2. The OS** | Raspberry Pi OS Bookworm, 64-bit — Debian for arm64 | `03` |
+| **3. System config** | Turning on the hardware interfaces. I2C and UART are **off by default**, and a serial console has to be moved out of the robot's way | `07` |
+| **4. The application** | Python packages, then TurboPi's own source | `07` |
+
+Layer 3 is the one that surprises people coming from normal Linux: on a Pi, the physical
+buses are disabled until you ask for them. Nothing is broken — it just isn't switched on yet.
+
+### Roughly how long
+
+| Step | Time | Notes |
+|---|---|---|
+| Install Imager, flash the card | 10–15 min | Mostly waiting on the write |
+| First boot + SSH in | 5–10 min | First boot resizes the filesystem and reboots itself |
+| Power verification | 10–15 min | Plus the stress test's own runtime |
+| System config + reboot | 10 min | I2C, UART, serial console |
+| Install dependencies | 20–45 min | `mediapipe` is the wildcard |
+| Clone source + verify | 10 min | |
+
+**Call it 1.5–2 hours of actual work** if nothing fights you, spread over as many sittings as
+you like. Mechanical assembly is separate — budget a couple of hours for that, unhurried.
+
+The long pole is dependency installation, and it's unattended waiting rather than work.
+
+---
+
 ## Flash stock Raspberry Pi OS (this card becomes the robot's OS)
 
 We deliberately start with **stock Raspberry Pi OS Bookworm 64-bit**, not the Hiwonder image.
