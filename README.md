@@ -53,13 +53,18 @@ Background and how to read the results:
 
 ## Start here
 
-1. **Send the image request to Hiwonder** — [`docs/image-request-email.md`](docs/image-request-email.md).
-   Only item with external lead time; nothing else waits on it.
-2. **Open the kit box.** Is there a microSD card? Photograph the expansion board silkscreen
-   (it identifies which board revision, which decides which SDK applies).
-3. **Flash stock Raspberry Pi OS** to your own card — [`docs/03-headless-boot.md`](docs/03-headless-boot.md).
+1. **Flash stock Raspberry Pi OS** to your card — [`docs/03-headless-boot.md`](docs/03-headless-boot.md).
    Username **`pi`**, SSH enabled, Wi-Fi preconfigured.
-4. **SSH in and run** `./check_power.sh --stress`.
+2. **SSH in and run** `./check_power.sh --stress`. Paste the output back.
+3. **Open the kit box.** Is there a microSD card, or a booklet with a QR/Drive link?
+   Photograph the expansion board silkscreen — it identifies the board revision.
+4. **Then build the robot software on that same card** —
+   [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md).
+
+**You do not need Hiwonder's system image.** Verified: the public repo is self-contained, and
+clean Raspberry Pi OS is a better base for a Pi 5 than their 2023-era image. Emailing them is
+optional — [`docs/image-request-email.md`](docs/image-request-email.md) — and nothing waits on
+a reply.
 
 ---
 
@@ -67,18 +72,20 @@ Background and how to read the results:
 
 | Phase | State |
 |---|---|
-| 0. Request the TurboPi Pi 5 image from Hiwonder | **Do this first — it has lead time** |
+| 0. Request the image from Hiwonder | **Optional** — not on the critical path |
 | 1. Verify Pi 5 + charger | Ready to run |
 | 2. Physical fit check (52Pi case, RTC battery, board revision) | Pending |
-| 3. Flash TurboPi image, headless boot | Pending |
+| 3. Build robot software on clean Raspberry Pi OS | Ready — `docs/07-build-from-clean-os.md` |
 | 4. Assemble and drive | Pending |
 | 5. Camera and built-in demos | Pending — note the display caveat in `docs/06-running-the-demos.md` |
 | 6. Concepts | Written, read as you go |
 
-**The image is the real blocker.** Hiwonder don't publish it — their docs ask you to email
-`support@hiwonder.com` with an order number. Bought at Micro Center means a retail receipt
-instead, so start that conversation early. Fallback (clean Raspberry Pi OS + the public GitHub
-source) is documented and viable.
+**The image turned out not to be a blocker.** It was initially assessed as one; on checking,
+the public repo resolves every import and ships every config and calibration file it needs, so
+clean Raspberry Pi OS plus the GitHub source is the better path — not a fallback. Their image's
+distinctive feature is Wi-Fi access-point mode, which would force your PC off its own network
+to reach the robot. Reasoning in
+[`docs/02-turbopi-pi5-compatibility.md`](docs/02-turbopi-pi5-compatibility.md).
 
 ---
 
@@ -93,6 +100,7 @@ source) is documented and viable.
 | [`docs/04-assembly-bringup.md`](docs/04-assembly-bringup.md) | Staged bring-up — one subsystem at a time |
 | [`docs/05-concepts.md`](docs/05-concepts.md) | GPIO/PWM, servos, mecanum kinematics, I2C vs UART |
 | [`docs/06-running-the-demos.md`](docs/06-running-the-demos.md) | Which demos need a display, and how to get one without HDMI |
+| [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md) | **The build runbook** — the primary path, no vendor image needed |
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
 | [`scripts/check_power.sh`](scripts/check_power.sh) | Power verification. Run on the Pi |
 | [`scripts/check_hardware.py`](scripts/check_hardware.py) | Probes serial, I2C, gpiochip, camera. Run on the Pi |

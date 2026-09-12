@@ -41,4 +41,7 @@ Three columns matter here: what you have, what has been **verified**, and what i
   `01-pi5-power-verification.md`.
 - **TurboPi's SDK hardcodes `/home/pi/TurboPi`** (`HiwonderSDK/mecanum.py`). Use username `pi`.
 - **The TurboPi OS image is not a public download** — Hiwonder require an email with an order
-  number. You have a Micro Center receipt instead. Start that request early.
+  number, and you have a Micro Center receipt instead. **This is no longer on the critical
+  path.** The public GitHub repo is self-contained (verified), and clean Raspberry Pi OS is a
+  better base for a Pi 5 than a 2023-era vendor image. See `02-turbopi-pi5-compatibility.md`;
+  build per `07-build-from-clean-os.md`.

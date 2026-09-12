@@ -83,52 +83,113 @@ chip by its label instead of its number.
 
 `scripts/check_hardware.py` detects this specific mismatch and tells you which chip RP1 is on.
 
-Hiwonder's own image pins a known-good kernel, so this mainly bites if you build from a current
-stock Raspberry Pi OS (the Path B fallback).
+Hiwonder's own image pins a known-good kernel, which is why `gpiochip4` is correct there. On a
+current stock Raspberry Pi OS — the path we're taking — expect to fix this one line.
+`07-build-from-clean-os.md` covers it, including a misleading error message it produces.
 
 ### Minor: hardcoded path
 
 `HiwonderSDK/mecanum.py` line 4 does `sys.path.append('/home/pi/TurboPi/')`. The user must be
 `pi` and the source must live at `/home/pi/TurboPi`. Worth knowing before you get creative with
-`uv` virtualenvs and project layout.
+`uv` virtualenvs and project layout — see the venv guidance in `07-build-from-clean-os.md`.
 
 ---
 
-## The thing that actually blocks you: getting the image
+## Do you need Hiwonder's system image? No.
 
-The code is fine. **The OS image is the hard part.**
-
-Hiwonder's own `resources_download.md` says the system image is *not* a public download:
+Hiwonder's own `resources_download.md` says the image is not a public download:
 
 > "System Image & Source Code: If you want to get the system image and source code, please
 > email us at support@hiwonder.com, and share your order number :)"
 
 You bought at Micro Center, so you have a retail receipt rather than a Hiwonder order number.
-**Start this request on day one** — it has lead time and nothing else depends on it.
 
-The docs also note kits normally ship with a preloaded microSD card. Check your box. But note
-that a card bundled with a *no-Pi* kit may well carry the **Pi 4B** image — the differing
-default passwords above are the quickest way to tell which one you have.
+**This was initially assessed as the project's blocker. On investigation it is not.** Four
+reasons, in order of how much they matter:
 
-### If Hiwonder doesn't come through
+### 1. The public repo is self-contained — verified, not assumed
 
-Build from clean Raspberry Pi OS Bookworm 64-bit. This is a genuine fallback, not a
-consolation prize. The application source is public on GitHub, and every third-party import in
-the codebase has been enumerated, so the dependency set is known rather than guessed:
+Every `import` across the codebase was resolved mechanically against the standard library,
+PyPI, and the repo itself. **Nothing is unresolved.** Every data file the code opens is
+present:
+
+| File | Purpose |
+|---|---|
+| `lab_config.yaml` | LAB colour thresholds for colour detection |
+| `servo_config.yaml` | Per-servo centre calibration |
+| `CameraCalibration/calibration_param.npz` | Fisheye lens calibration |
+| `loading.jpg` | Splash frame |
+
+The camera calibration data is the one that would have hurt to be missing. It's there.
+
+### 2. The image findable online is the wrong one anyway
+
+The circulating filename is **`TurboPi20230320.zip` — March 2023.** The Raspberry Pi 5 launched
+in **October 2023**. A pre-Pi-5 image cannot contain Pi 5 support, and the Pi 5 needs
+Bookworm-era firmware and kernel to boot at all.
+
+So searching for it online is likely to land you a **Pi 4B image that won't boot on your
+board** — and burn an afternoon proving it.
+
+### 3. Their image's unique parts are things you actively don't want
+
+What the image adds over the public repo is `hiwonder-toolbox` / `hw_wifi.service` — the
+robot's Wi-Fi **access-point hotspot** mode — and `hw_button_scan.service`.
+
+AP mode is a workaround for classrooms with no usable Wi-Fi. It makes the robot broadcast its
+own network, which means **your PC has to leave your own network** to talk to it. You have
+normal Wi-Fi. This is a downgrade for you.
+
+It's worse than neutral. `HiwonderSDK/led.py` carries a comment saying the board LED is
+**occupied by `hw_wifi`**, and `key.py` says the buttons are held by `hw_button_scan`.
+**Their image introduces those conflicts.** A clean OS doesn't have them.
+
+### 4. Current Raspberry Pi OS is a better base for a Pi 5 than a 2023-era vendor image
+
+And it matches how you said you want to work — understanding the system rather than
+inheriting an opaque one.
+
+### Conclusion
+
+**Build from clean Raspberry Pi OS.** Runbook:
+[`07-build-from-clean-os.md`](07-build-from-clean-os.md).
+
+Send the email anyway if you want the Wi-Fi toolbox as a bonus
+([`image-request-email.md`](image-request-email.md)) — it costs two minutes. But nothing waits
+on it, and if they never reply you lose nothing that matters.
+
+Check the kit box first: Hiwonder put a QR code / Drive link in the printed booklet for kit
+owners, which would get you the image without involving support at all.
+
+## What building it yourself actually costs
+
+The dependency set, enumerated from every third-party import rather than guessed:
 
 ```
 opencv-python  numpy  mediapipe  pyserial  smbus2  gpiod
 PyYAML  pillow  pyzbar  pandas  json-rpc  werkzeug
 ```
 
-`pyzbar` additionally needs the system package `libzbar0`. `mediapipe` on arm64 is the one
-most likely to give you trouble — pin it rather than taking whatever pip resolves.
+Plus: enable I2C and UART, disable the serial console, use username `pi`, place the source at
+`/home/pi/TurboPi`, and fix the `gpiochip4` reference. An evening, not a project.
 
-You would also own: enabling I2C and UART, disabling the serial console, creating the `pi`
-user, placing the source at `/home/pi/TurboPi`, and fixing the `gpiochip4` reference. That is
-an evening, not a project — but more work than Path A, so we only take it if forced.
+**Two install traps**, both handled in the runbook:
 
-**What the image gives you that the public repo doesn't:** `hiwonder-toolbox` (their Wi-Fi
-AP/STA manager — `wifi_conf.py` plus `hw_wifi.service`), a pinned known-good kernel,
-preinstalled dependencies, and VNC already configured. Of those, the Wi-Fi toolbox is the only
-piece with no public equivalent, and plain NetworkManager covers the same need.
+- **Do not `pip install gpiod`.** The code uses the libgpiod **v1** API (`chip.get_line()`,
+  `line.request(type=gpiod.LINE_REQ_DIR_OUT)`). PyPI's `gpiod` is **v2**, with an incompatible
+  API. Use apt's `python3-libgpiod`.
+- **Do not `pip install opencv-python`** on the Pi — it may compile from source for hours. Use
+  apt's `python3-opencv`.
+
+### Risk scoping, if a dependency refuses to install
+
+| Package | Used by | Impact if missing |
+|---|---|---|
+| `mediapipe` | `FaceTracking.py`, `GestureRecognition.py` only | Those two demos |
+| `pyzbar` | `QuickMark.py` only | QR reading |
+| `pandas` | `Avoidance.py` only | One demo |
+| `cv2`, `numpy` | everything | Genuinely required |
+
+Driving, line following, colour tracking, colour detection and visual patrol need only `cv2`
+and `numpy`. The riskiest package on arm64 (`mediapipe`) puts **two** demos at risk and blocks
+nothing else — and of the four demos you named, only face tracking touches it.

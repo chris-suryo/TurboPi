@@ -8,12 +8,13 @@ belongs in, because a command run in the wrong shell is a wasted hour.
 
 ---
 
-## Phase 1 flash: stock Raspberry Pi OS (for hardware verification)
+## Flash stock Raspberry Pi OS (this card becomes the robot's OS)
 
 We deliberately start with **stock Raspberry Pi OS Bookworm 64-bit**, not the Hiwonder image.
 Reason: right now we are testing *hardware*. A known-good, widely-documented OS keeps the
 variable count down. If something misbehaves we want to suspect the charger, not a vendor
-image. It's also exactly the base the Path B fallback would need.
+image. It is also the base the robot itself will run on — see
+`07-build-from-clean-os.md`. You flash once; this card becomes the robot's OS.
 
 ### 1. Install Raspberry Pi Imager
 
@@ -94,10 +95,11 @@ things rather than reporting UNKNOWN. Paste the output back.
 
 ---
 
-## Phase 3 flash: the Hiwonder TurboPi image
+## Optional: the Hiwonder TurboPi image
 
-Once Hiwonder sends the **Pi 5** image (see `02-turbopi-pi5-compatibility.md` — request it
-early, it has lead time).
+**You don't need this** — `02-turbopi-pi5-compatibility.md` explains why, and
+`07-build-from-clean-os.md` is the path we're taking. Keep this section for the case where
+Hiwonder do send you the Pi 5 image and you want it on a second card as a reference.
 
 Their image is a `.img` file rather than an Imager-managed OS, so Imager's settings screen
 does not apply. **Use Imager's "Use custom" option** and skip the customisation prompt.

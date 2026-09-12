@@ -8,8 +8,15 @@ Hiwonder do not publish the TurboPi OS image. Their own `resources_download.md` 
 Buying at Micro Center means a retail receipt, not a Hiwonder order number — so the email
 below pre-empts that rather than waiting for them to ask for something you don't have.
 
-**Send this early.** It's the only part of this project with external lead time, and nothing
-else waits on it.
+> **This is optional.** You do not need their image: the public GitHub repo is self-contained
+> and clean Raspberry Pi OS is the better base for a Pi 5. See
+> [`02-turbopi-pi5-compatibility.md`](02-turbopi-pi5-compatibility.md) for the evidence, and
+> [`07-build-from-clean-os.md`](07-build-from-clean-os.md) for the path we're actually taking.
+> Send this if you want the Wi-Fi toolbox as a bonus. Don't wait on a reply.
+
+**Check the box first — it may make this unnecessary.** Hiwonder put a QR code / Drive link to
+"Source code and system image" in the printed booklet that ships with the kit. If yours has
+one, you get the download without involving support at all.
 
 ---
 
@@ -54,5 +61,9 @@ and `pi`/`raspberry` works, they sent the **Pi 4B** image — go back to them.
 
 ## If they don't come through
 
-`docs/02-turbopi-pi5-compatibility.md` documents the fallback: clean Raspberry Pi OS Bookworm
-64-bit plus the public source. The dependency list is enumerated there.
+Nothing is lost. [`07-build-from-clean-os.md`](07-build-from-clean-os.md) is the primary path
+regardless, and it doesn't reference the image at all.
+
+Be aware that the image circulating publicly is `TurboPi20230320.zip` — **March 2023**,
+predating the Raspberry Pi 5's October 2023 launch. If you find "a TurboPi image" online, it
+is very likely the Pi 4B one and will not boot on your board. Don't spend an afternoon on it.
