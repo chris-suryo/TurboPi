@@ -93,6 +93,19 @@ it is a weaker guarantee than the chip numbering would be. If a future update dr
 those two modules break — LED and buttons only. Looking the chip up by label is still the
 durable fix, just no longer urgent.
 
+## Interface enablement (same session)
+
+| Interface | Before | After `raspi-config do_i2c 0` + `enable_uart=1` + reboot |
+|---|---|---|
+| I2C bus 1 | absent | ✅ `/dev/i2c-1` present |
+| Header UART | absent | ✅ `/dev/ttyAMA0` present |
+| `/dev/serial0` | → `ttyAMA10` (debug UART) | → **`ttyAMA0`** (header UART) |
+| Serial console | `console=serial0,115200` in cmdline.txt | removed |
+
+The `serial0` remap is the notable one: enabling the UART moves that alias onto the header
+port, so leaving the console entry in place would have put a kernel console on the exact
+device the robot controller uses.
+
 ## Decisions this settles
 
 - **Don't buy the 27 W PSU.** The measured sag is negligible and the robot won't use USB-C power.

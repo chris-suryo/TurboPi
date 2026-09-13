@@ -37,13 +37,20 @@ By default a kernel console and login prompt are routed to a serial port. If tha
 same one the robot board uses, both fight over it and the symptom is intermittently corrupted
 motor commands — which looks like flaky hardware and is miserable to debug.
 
-**On the Pi 5 specifically**, measured on this board: `/dev/serial0 -> ttyAMA10`, which is the
-Pi 5's dedicated **debug UART** (the 3-pin JST connector), *not* the 40-pin header UART that
-`enable_uart=1` exposes as `ttyAMA0`. So the console may well not conflict at all.
+**Measured on the Pi 5, before and after — and the answer changes:**
 
-**Remove it anyway.** The cost is zero — you have no debug cable and aren't using a serial
-console — and it eliminates the whole class of failure without needing to be certain about
-which UART the alias points to after a config change.
+| | `/dev/serial0` points to | Is the console a conflict? |
+|---|---|---|
+| Before `enable_uart=1` | `ttyAMA10` (debug UART, 3-pin connector) | No |
+| **After `enable_uart=1` + reboot** | **`ttyAMA0`** (40-pin header UART) | **Yes** |
+
+`enable_uart=1` **remaps the `serial0` alias onto the header UART.** So a `console=serial0`
+entry in `cmdline.txt` that was harmless beforehand lands squarely on `/dev/ttyAMA0` — the
+exact port the robot board uses — the moment you enable the UART.
+
+**So removing it is genuinely necessary, not just prudent.** Do it in the same pass as
+`enable_uart=1`; if you enable the UART and leave the console, you get a kernel console and the
+robot controller sharing one serial port, and intermittently corrupted motor commands.
 
 ```bash
 sudo systemctl disable --now serial-getty@ttyAMA0.service

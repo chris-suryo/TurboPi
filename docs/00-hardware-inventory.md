@@ -45,10 +45,10 @@ No secrets recorded here — passwords are not stored in this repo.
 4. ~~Does `/dev/gpiochip4` exist as a compat symlink?~~ **RESOLVED: yes.**
    `/dev/gpiochip4 -> gpiochip0`. TurboPi's hardcoded `gpiochip4` works **unmodified**. The
    gpiochip risk tracked through this project does not apply on this system.
-5. **What does `enable_uart=1` produce on kernel 6.18?** Partly resolved: `/dev/serial0 ->
-   ttyAMA10`, the Pi 5's *debug* UART, **not** the 40-pin header UART. `enable_uart=1` should
-   create `/dev/ttyAMA0` on GPIO 14/15 — verify empirically after the reboot rather than
-   assuming, since the alias behaviour differs from Pi 4.
+5. ~~What does `enable_uart=1` produce on kernel 6.18?~~ **RESOLVED by measurement.** It
+   creates `/dev/ttyAMA0` **and remaps `/dev/serial0` from `ttyAMA10` to `ttyAMA0`.** So a
+   `console=serial0` entry becomes a real conflict with the robot board the moment the UART is
+   enabled — removing it was necessary, not merely tidy.
 6. **Which expansion board revision?** Current source uses a *serial* controller board; older
    TurboPi revisions differ. Determined by looking at the board in Phase 2.
 7. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the
