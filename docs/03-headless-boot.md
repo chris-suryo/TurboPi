@@ -113,19 +113,62 @@ Insert the microSD via your USB reader, launch Imager, then:
 - **Choose Device** → Raspberry Pi 5
 - **Choose OS** → Raspberry Pi OS (64-bit)
 - **Choose Storage** → your card (*check the size — this erases it*)
-- Click **Next**, then **EDIT SETTINGS**. Do not skip this. This is what makes it headless:
+- **Next** → then enter customisation. **Do not skip it** — it is what makes the boot headless.
+
+### Imager v2.x (sidebar wizard)
+
+Recent Imager versions (v2.0+) split customisation into a left-hand sidebar instead of one
+settings page. Work down it in order; **never click "SKIP CUSTOMISATION"**, which discards
+everything and leaves you with an unreachable headless Pi.
+
+| Sidebar section | What to set |
+|---|---|
+| **Hostname** | `turbopi` |
+| **Localisation** | Time zone, keyboard — **and the Wi-Fi / WLAN country** (`US`). If the radio's country is unset the Pi may never bring Wi-Fi up |
+| **User** | Username **`pi`** (not negotiable — the SDK hardcodes `/home/pi`), plus a password |
+| **Wi-Fi** | SECURE NETWORK, your SSID **exactly**, password twice. Leave "Hidden SSID" unchecked unless yours really is hidden |
+| **Remote access** | **Enable SSH**, password authentication. Without this there is no way in |
+| **Raspberry Pi Connect** | **Skip.** It's Raspberry Pi's cloud remote-access service and needs an account. You only need LAN access |
+
+Then continue to **Writing** and confirm the erase.
+
+### Older Imager (single settings page)
+
+Click **EDIT SETTINGS** at the "apply OS customisation" prompt, and set the same values —
+General tab for hostname / user / Wi-Fi / locale, Services tab for SSH.
 
 | Setting | Value | Why |
 |---|---|---|
 | Hostname | `turbopi` | Lets you use `turbopi.local` instead of hunting for an IP |
-| Username | **`pi`** | TurboPi's SDK hardcodes `/home/pi/TurboPi` — save yourself the pain |
+| Username | **`pi`** | TurboPi's SDK hardcodes `/home/pi/TurboPi` |
 | Password | your choice | |
 | Wi-Fi SSID / password | your network | Without this a headless Pi has no way to reach you |
 | Wi-Fi country | your country | Omitting it can leave the radio disabled |
-| Locale / timezone | yours | |
-| **Services tab → Enable SSH** | **Use password authentication** | Without this, there is no way in |
+| **Enable SSH** | password authentication | Without this, there is no way in |
 
-Then **Save** → **Yes** → **Yes** to confirm the erase.
+### Getting the SSID exactly right
+
+A mistyped SSID means the Pi silently never joins, and you have no screen to debug it on. Some
+routers include punctuation or band labels in the name itself, so read it rather than
+remembering it.
+
+**Terminal (Mac):**
+```bash
+networksetup -getairportnetwork en0
+```
+
+Prints `Current Wi-Fi Network: <ssid>`. Copy everything after the colon, verbatim — spaces,
+parentheses and all. If `en0` isn't your Wi-Fi interface:
+
+```bash
+networksetup -listallhardwareports
+```
+
+and use the device listed under `Hardware Port: Wi-Fi`.
+
+**2.4GHz vs 5GHz:** the Pi 5 is dual-band, so either works. If your router exposes both as
+separate SSIDs, prefer **2.4GHz for the finished robot** — better range and wall penetration
+for something that drives around. For bench testing next to the router, it makes no difference.
 
 > Use `pi` as the username even on this throwaway install. It costs nothing now and avoids a
 > class of path bugs later.
