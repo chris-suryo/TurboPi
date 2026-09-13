@@ -104,6 +104,7 @@ to reach the robot. Reasoning in
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
 | [`scripts/check_power.sh`](scripts/check_power.sh) | Power verification. Run on the Pi |
 | [`scripts/check_hardware.py`](scripts/check_hardware.py) | Probes serial, I2C, gpiochip, camera. Run on the Pi |
+| [`scripts/check_opencv_api.py`](scripts/check_opencv_api.py) | Verifies TurboPi's OpenCV calls against the installed version. Run on the Pi |
 | [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) | Measured verification results for the Pi and charger |
 | [`NOTES-dog-cam-integration.md`](NOTES-dog-cam-integration.md) | One parked finding. No code |
 

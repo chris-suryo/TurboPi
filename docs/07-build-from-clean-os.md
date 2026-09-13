@@ -175,6 +175,27 @@ cd /home/pi/TurboPi
 > `smbus2`, `pyzbar` and `mediapipe` as missing even when they're correctly installed. Same
 > script, different interpreter, different answer.
 
+### Verify the OpenCV API, not just that it imports
+
+Raspberry Pi OS now ships **OpenCV 5.x**, while TurboPi's code was written against 4.x. A
+major version bump relocates and removes symbols, and `import cv2` succeeding tells you
+nothing about whether the specific calls this codebase makes still work.
+
+```bash
+~/turbopi-venv/bin/python ~/check_opencv_api.py
+```
+
+It exercises every `cv2` name extracted from the TurboPi source, plus the real pipelines:
+LAB thresholding, morphology, contour finding, JPEG encoding for the MJPEG stream, and the
+fisheye undistort maps that `Camera.__init__` builds at construction time.
+
+Two specifics it's looking for:
+
+- **`cv2.VideoWriter_fourcc`** (`Camera.py:39`) — the most likely casualty of the 4→5 bump. If
+  it's gone, the script names the replacement.
+- **`findContours(...)[-2]`** — the version-agnostic idiom every colour demo uses. It has
+  survived 3.x→4.x; the script confirms it still holds on 5.x rather than assuming.
+
 ### Verify every dependency at once
 
 ```bash
