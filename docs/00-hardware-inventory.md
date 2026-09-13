@@ -83,6 +83,25 @@ with USB-C to Lightning, which won't fit. A thin or poor-quality cable is one of
 common causes of Pi 5 undervoltage, because the voltage drop happens in the cable rather than
 the supply.
 
+## The config that actually matters
+
+Hiwonder's expansion-board manual §2.1 requires **four** lines in `/boot/firmware/config.txt`:
+
+```
+usb_max_current_enable=1
+avoid_warnings=1
+enable_uart=1
+dtparam=uart0=on
+```
+
+Setting only `enable_uart=1` produces a system that passes every check — `/dev/ttyAMA0` exists,
+`pinctrl` shows `a4 // TXD0/RXD0`, the port opens without error — and still cannot talk to the
+board. `dtparam=uart0=on` is required.
+
+`usb_max_current_enable=1` also resolves the 600 mA question from Phase 1 the way Hiwonder
+intends: on the robot the Pi is fed over GPIO with no USB-PD negotiation, so the limit is
+forced rather than negotiated.
+
 ## Known constraints
 
 - **The Pi is not powered over USB-C on the finished robot.** It runs from the expansion board

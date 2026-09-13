@@ -18,18 +18,37 @@ Two of the three buses TurboPi uses are off by default.
 sudo raspi-config nonint do_i2c 0          # 0 means enable
 ```
 
-For the UART, be explicit rather than trusting a menu — this is the link that carries every
-motor and servo command, so it's worth seeing the config:
+For the UART, use **Hiwonder's own required configuration** — not just `enable_uart=1`.
+
+> **This is the step that cost us an evening.** `enable_uart=1` alone creates `/dev/ttyAMA0`
+> and puts GPIO14/15 into UART mode (`pinctrl` confirms `a4 // TXD0/RXD0`), so everything
+> *looks* right — but the board stays mute. Hiwonder's expansion-board manual, section 2.1
+> "Raspberry Pi Control Board Tutorial (Must-Read!)", specifies **four** lines, and
+> `dtparam=uart0=on` is the one that actually brings up the peripheral the board talks to.
 
 ```bash
 sudo nano /boot/firmware/config.txt
 ```
 
-Ensure this line is present, uncommented:
+Append, verbatim from Hiwonder's manual:
 
 ```
+usb_max_current_enable=1
+avoid_warnings=1
 enable_uart=1
+dtparam=uart0=on
 ```
+
+What each one is for:
+
+| Line | Why |
+|---|---|
+| `dtparam=uart0=on` | **The critical one.** Without it the board never answers |
+| `enable_uart=1` | Creates `/dev/ttyAMA0` on the 40-pin header |
+| `usb_max_current_enable=1` | Lifts the USB budget from 600 mA to 1.6 A. Hiwonder ship this because the board feeds the Pi over GPIO, where **no USB-PD negotiation happens** — so the Pi would otherwise always assume the low limit. This is the setting that gives your USB camera room |
+| `avoid_warnings=1` | Suppresses the on-screen undervoltage overlay. Cosmetic and irrelevant headless — it does **not** alter the `get_throttled` flags, so `check_power.sh` still tells the truth |
+
+Then reboot and verify with `pinctrl get 15`: it should read **`hi`**, not `lo`.
 
 ### Disable the serial login console
 
