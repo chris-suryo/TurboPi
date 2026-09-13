@@ -167,8 +167,24 @@ def _pin_function_probe():
             info(f"          {line}")
         low = out.lower()
         if "txd" in low and "rxd" in low:
-            info("        -> GPIO14/15 ARE in UART mode. The Pi side is correct,")
-            info("           so the silence is the board's or the wiring's.")
+            info("        -> GPIO14/15 ARE in UART mode. The Pi side is correct.")
+            # An idle UART line sits HIGH (the "mark" state). RX reading low
+            # while a pull-up is enabled means something external is sinking it.
+            rx = [l for l in out.splitlines() if "15:" in l]
+            if rx and "| lo" in rx[0]:
+                info("        -> BUT RX (GPIO15) is idling LOW. An idle UART line")
+                info("           should sit HIGH, and a pull-up is enabled here, so")
+                info("           something external is actively pulling it down.")
+                info("           Classic signature of an UNPOWERED peripheral whose")
+                info("           protection diodes clamp the line, or an MCU held in")
+                info("           reset. Check the expansion board's power first.")
+                info("")
+                info("           Quick re-test after fixing power - no script needed:")
+                info("             pinctrl get 15     # want 'hi', not 'lo'")
+            elif rx and "| hi" in rx[0]:
+                info("        -> RX idles HIGH, which is correct. The line looks")
+                info("           electrically healthy, so suspect the board's own")
+                info("           state or the protocol rather than power.")
         else:
             info("        -> GPIO14/15 are NOT in UART mode. The Pi is not driving")
             info("           the serial pins - a Pi-side config problem, not the")

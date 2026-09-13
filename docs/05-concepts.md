@@ -218,3 +218,45 @@ happens: if no packets arrive, it listens for raw bytes on the UART. Total silen
 board is unpowered or disconnected; bytes without the `0xAA 0x55` frame header mean it's alive
 but being misunderstood. Those are genuinely different problems, and worth distinguishing
 before you pick up a screwdriver.
+
+
+---
+
+## 7. Reading a UART with no instruments
+
+A real diagnostic from this build, worth keeping because it needed no oscilloscope.
+
+The robot's controller board was silent. `pinctrl get 14,15` returned:
+
+```
+14: a4    pn | hi // GPIO14 = TXD0
+15: a4    pu | lo // GPIO15 = RXD0
+```
+
+Three facts in six columns:
+
+**`a4`** — both pins are in *alternate function 4*, their UART mode. A GPIO pin can be a plain
+input, a plain output, or handed to a hardware peripheral. These are handed to the UART, so the
+Pi's configuration is correct. That alone rules out half the possible causes.
+
+**`hi` on TXD** — an idle UART line sits **high**. This is the "mark" state, a convention
+inherited from telegraphy: an idle line is held energised so that a *broken* line (which goes
+low) is distinguishable from an idle one. The Pi's transmit line is idle and healthy.
+
+**`lo` on RXD** — and this is the tell. Receive should also idle high. The `pu` says the Pi has
+its internal **pull-up** enabled, which weakly ties the line high. It reads low anyway, so
+**something external is actively sinking it**.
+
+An unpowered chip is not an open circuit. Its input protection diodes conduct once the line
+rises above its (absent) supply rail, clamping it near ground. So an unpowered peripheral
+wired to a powered host drags the shared line low — which is exactly this signature.
+
+So without touching the robot: the Pi is configured correctly, its transmitter is fine, and
+something on the other end is either unpowered or held in reset.
+
+**The useful part is that this becomes a one-command test.** Once the board has power,
+`pinctrl get 15` should read `hi`. No script, no imports, no test harness — one line that
+answers "is the other end alive?" before any software is involved.
+
+That's a general habit worth having: when a protocol won't talk, drop a layer. Before debugging
+packets, ask whether the wire is in the right state.
