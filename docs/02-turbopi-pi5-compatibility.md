@@ -126,7 +126,7 @@ The camera calibration data is the one that would have hurt to be missing. It's 
 
 The circulating filename is **`TurboPi20230320.zip` — March 2023.** The Raspberry Pi 5 launched
 in **October 2023**. A pre-Pi-5 image cannot contain Pi 5 support, and the Pi 5 needs
-Bookworm-era firmware and kernel to boot at all.
+Bookworm-era-or-newer firmware and kernel to boot at all.
 
 So searching for it online is likely to land you a **Pi 4B image that won't boot on your
 board** — and burn an afternoon proving it.

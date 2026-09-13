@@ -3,7 +3,7 @@
 **This is the primary path.** You do not need Hiwonder's system image — see
 [`02-turbopi-pi5-compatibility.md`](02-turbopi-pi5-compatibility.md) for why.
 
-Good news on sequencing: **this reuses the SD card from Phase 1.** The stock Bookworm install
+Good news on sequencing: **this reuses the SD card from Phase 1.** The stock Raspberry Pi OS install
 you made to test the charger becomes the robot's OS. No reflash, no second card.
 
 All commands are **SSH (Pi)** unless labelled otherwise.
@@ -75,12 +75,13 @@ on memory.
 > TurboPi's code uses the **libgpiod v1** Python API — `chip.get_line(n)` and
 > `line.request(type=gpiod.LINE_REQ_DIR_OUT)`. The PyPI `gpiod` package is **v2.x**, which has
 > a completely different API (`gpiod.request_lines(...)`). Installing it from pip gives you a
-> module named `gpiod` that the code cannot use. Bookworm's `python3-libgpiod` is v1.6.x,
-> which is the one that matches.
+> module named `gpiod` that the code cannot use. The distro's `python3-libgpiod` is the v1
+> series, which is the one that matches. Verify with `python3 -c "import gpiod; print(gpiod.__version__)"`
+> — if it reports 2.x, that's the wrong one.
 
 ## 3. Python packages
 
-Bookworm enforces PEP 668 — system-wide `pip install` is refused. Use a virtualenv that can
+Debian 12 and later enforce PEP 668 — system-wide `pip install` is refused. Use a virtualenv that can
 still see the apt-installed modules:
 
 ```bash

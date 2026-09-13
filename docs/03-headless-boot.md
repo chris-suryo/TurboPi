@@ -59,7 +59,7 @@ to diagnose, because you'll know which layer broke.
 | Layer | What it is | Where |
 |---|---|---|
 | **1. The card** | The SD card is the Pi's hard drive. Flashing = installing the OS | `03` (this doc) |
-| **2. The OS** | Raspberry Pi OS Bookworm, 64-bit — Debian for arm64 | `03` |
+| **2. The OS** | Raspberry Pi OS 64-bit — Debian for arm64. Current builds are **Debian 13 "Trixie"** (Bookworm was the previous release) | `03` |
 | **3. System config** | Turning on the hardware interfaces. I2C and UART are **off by default**, and a serial console has to be moved out of the robot's way | `07` |
 | **4. The application** | Python packages, then TurboPi's own source | `07` |
 
@@ -86,7 +86,7 @@ The long pole is dependency installation, and it's unattended waiting rather tha
 
 ## Flash stock Raspberry Pi OS (this card becomes the robot's OS)
 
-We deliberately start with **stock Raspberry Pi OS Bookworm 64-bit**, not the Hiwonder image.
+We deliberately start with **stock Raspberry Pi OS 64-bit** (currently Debian 13 "Trixie"), not the Hiwonder image.
 Reason: right now we are testing *hardware*. A known-good, widely-documented OS keeps the
 variable count down. If something misbehaves we want to suspect the charger, not a vendor
 image. It is also the base the robot itself will run on — see

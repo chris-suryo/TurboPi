@@ -116,7 +116,11 @@ else
     verdict "Undervoltage occurred since boot — charger is marginal. Replace it."
   else
     ok "No undervoltage now, and none since boot."
-    verdict "No undervoltage seen (uptime $(cut -d. -f1 /proc/uptime)s). Meaningful only if the Pi was actually loaded — use --stress."
+    if [ "$STRESS" -eq 1 ]; then
+      verdict "No undervoltage at idle (uptime $(cut -d. -f1 /proc/uptime)s). See the load-test result below for the meaningful check."
+    else
+      verdict "No undervoltage seen (uptime $(cut -d. -f1 /proc/uptime)s). Meaningful only if the Pi was actually loaded — use --stress."
+    fi
   fi
 
   if [ "$EVR_TMP" -eq 1 ] || [ "$NOW_TMP" -eq 1 ]; then
