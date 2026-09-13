@@ -7,9 +7,9 @@ Three columns matter here: what you have, what has been **verified**, and what i
 |---|---|---|
 | Hiwonder TurboPi kit | Mecanum wheels, 2-DOF pan-tilt camera, ultrasonic. $129.99, Micro Center. **No Pi included** | Not yet inspected |
 | Raspberry Pi 5, 8GB | **Open box** — not yet powered on | **Unverified — Phase 1** |
-| 52Pi aluminium case + heatsink fan | Likely conflicts with the expansion-board HAT and chassis mounting | **Fit check needed — Phase 2** |
+| 52Pi aluminium case + heatsink fan | **Confirmed unusable on the robot** — the build sandwiches the Pi under 16mm standoffs sized for the kit's active cooler | Return candidate; check window |
 | 128GB microSD + USB reader | | Not yet flashed |
-| Raspberry Pi RTC battery | Fit early, while the Pi is still bare | Not yet fitted |
+| Raspberry Pi RTC battery | 2-pin JST on the Pi 5; fit before the sandwich goes together | Not yet fitted |
 | USB-C charger | Model unknown, label unreadable | **Unverified — Phase 1** |
 | Official 27W PSU | Not purchased | Decision pending on Phase 1 result |
 
@@ -27,13 +27,12 @@ Three columns matter here: what you have, what has been **verified**, and what i
    and Pi 5 images have different default passwords, which identifies it in one login attempt.
 4. **Which expansion board revision?** Current source uses a *serial* controller board; older
    TurboPi revisions differ. Determined by looking at the board in Phase 2.
-5. **Does the 52Pi case physically fit the build?** Offer the parts up before committing.
-6. **Is the kit the standard or the advanced tier?** New question. The advanced tier runs a
-   **Docker + ROS2** stack on Ubuntu (`/home/ubuntu`), distributed only as container images;
-   the standard tier is the fully-public plain-Python repo on Raspberry Pi OS (`/home/pi`).
-   Everything here targets **standard**, which a $129.99 no-Pi kit almost certainly is and
-   which covers every demo on the list. Assembly and hardware are identical either way. Check
-   the box art / model number — see `04-assembly-bringup.md`.
+5. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the
+   Pi sandwiched under M2.5×16 standoffs sized to clear an active cooler. A full enclosure
+   can't live in that gap. Use the kit's cooler; the case is a return candidate.
+6. ~~Is the kit standard or advanced?~~ **RESOLVED (2026-09-13): standard kit.** The
+   plain-Python repo on Raspberry Pi OS under `/home/pi` is the correct target. No Docker,
+   no ROS2. `07-build-from-clean-os.md` applies as written.
 7. **Is SSH enabled by default on the Hiwonder image?** Unverified. Their docs demonstrate VNC
    throughout and never show an SSH login, so this is treated as unknown rather than assumed.
    If SSH is off, VNC is the way in and we enable SSH from there. See

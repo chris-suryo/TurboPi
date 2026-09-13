@@ -43,10 +43,9 @@ Quick, and each one answers a question that's currently open:
    system image" download there for kit owners. If it's there, you skip emailing support.
 3. **Photograph the expansion board silkscreen.** Confirms whether you have the current
    serial-controller board or an older I2C-era revision.
-4. **Which kit tier is it — standard or advanced?** Check the box art / model number. This
-   one's new: see below.
+4. ~~Which kit tier is it?~~ **Resolved: standard kit.** The plain-Python path is correct.
 
-### Standard vs advanced — why it matters (later, not now)
+### Standard vs advanced — resolved, kept for reference
 
 There are two TurboPi software tiers, and they're genuinely different stacks:
 
@@ -56,38 +55,58 @@ There are two TurboPi software tiers, and they're genuinely different stacks:
 | OS / user | Raspberry Pi OS, `/home/pi` | Ubuntu, `/home/ubuntu` |
 | Public source? | **Yes, fully** | No — distributed as container images |
 
-Everything in this project targets the **standard** tier, which is almost certainly what a
-$129.99 no-Pi kit is, and which contains every demo on your list — line following, colour
-tracking, face tracking, obstacle avoidance.
+**Confirmed standard**, so everything in this project applies as written: the public repo,
+`/home/pi/TurboPi`, and `07-build-from-clean-os.md`. Every demo on your list — line following,
+colour tracking, face tracking, obstacle avoidance — is in the standard tier.
 
-**The hardware and the assembly are the same either way**, so this changes nothing today. It
-only matters if you later want the ROS2 / AI-model features, which do require Hiwonder's
-containers and can't be rebuilt from the public repo.
+The advanced tier only matters if you later want ROS2 / AI-model features, which need
+Hiwonder's containers and can't be rebuilt from the public repo.
 
 ---
 
-## Before assembly: three fit checks
+## Before assembly
 
-### 1. The 52Pi aluminium case almost certainly has to come off
+### 1. The 52Pi aluminium case is out — confirmed
 
-This is worth knowing before you start screwing things together. The TurboPi expects:
+**Resolved by the kit's own step-2 diagram**, not a guess any more. The Pi is built into a
+sandwich:
 
-- The expansion board seated on the Pi's **40-pin header** (it's a HAT)
-- The Pi **bolted to the chassis** at its mounting holes
+```
+        expansion board          ← secured with M2.5*6 screws
+   M2.5*16 dual-pass standoffs   ← 16mm, sized to clear the cooler
+      Raspberry Pi 5 + active cooler (heatsink + fan)
+   M2.5*6 single-pass standoffs  ← feet underneath
+```
 
-A full aluminium enclosure generally conflicts with both. Likely outcome: **use the 52Pi case
-for the Phase 1 bench testing** (where its cooling is genuinely useful during the stress test),
-then remove it for the robot build and rely on the kit's mounting plus whatever active cooler
-the expansion board provides.
+Those 16 mm standoffs exist specifically to clear an **active cooler** sitting on the Pi. A
+full aluminium enclosure cannot live in that gap, and the expansion board has to reach the
+40-pin header anyway.
 
-Verify by offering the parts up *before* committing. Don't force anything.
+**Use the cooler that comes with the kit.** The 52Pi case is a return candidate — it's still
+fine for bench testing before you mount the Pi, and it'd be useful if you ever repurpose the
+Pi 5 for something else, so check your return window and decide.
 
-### 2. Fit the RTC battery now
+### 2. Before you screw the sandwich together — four checks
 
-It connects to a small dedicated 2-pin connector on the Pi 5 (not the GPIO header). Fitting it
-while the Pi is bare is far easier than after it's buried in a chassis. It keeps the clock
-running across power cycles — genuinely useful on a robot that gets switched off by a physical
-switch and has no internet on first boot.
+This is the point of no easy return, so spend two minutes here.
+
+**a. Bench-test the Pi first.** See the callout below — this is the big one.
+
+**b. Fit the RTC battery.** Much easier now than later. It's a 2-pin JST connector on the Pi 5
+(not the GPIO header), and the battery usually has an adhesive back so it can sit on the Pi's
+underside. If there's a small flat black part in your step-2 parts bag, that's likely it.
+
+**c. Check you can still reach the microSD slot.** The slot is on the edge of the Pi 5. Once
+the sandwich is built and bolted into the chassis, **can you still get a card in and out?**
+You will reflash this card more than once. Verify it before you tighten anything — I can't
+tell you the answer from here, because it depends on the chassis geometry in front of you.
+
+**d. Seat the 40-pin header fully.** The expansion board connects to the Pi through it, and a
+partially-seated HAT causes intermittent, maddening failures that look like software bugs.
+Press it home evenly before the standoff screws go in — screws should hold a board that's
+already seated, not pull it down.
+
+---
 
 ### 3. Identify your expansion board revision
 
@@ -97,6 +116,34 @@ TurboPi revisions used a different, I2C-era board. If yours is the older one, th
 you need differs. Photograph the board and we'll confirm which you have rather than assuming.
 
 ---
+
+## Stop here and bench-test the Pi
+
+**Nothing software-related is *required* before mounting the Pi.** No SD card needed, no
+configuration. You can bolt it in now and flash later — the card goes in the slot on the Pi's
+edge and the OS doesn't care when it arrives.
+
+But this step is the **last easy moment**, and it's worth taking:
+
+- Your open-box Pi 5 is still **unverified**. If it's faulty, you want to know while it's a
+  bare board on a desk, not bolted under an expansion board inside a chassis.
+- The charger is unverified too, and the undervoltage test is far easier on the bench.
+- That was your stated reason for this whole project: verify the foundations before building
+  on top of them. This is the moment that stops being possible for free.
+
+It costs roughly **45 minutes** and it's the same work you'd do later anyway:
+
+1. Flash the card — [`03-headless-boot.md`](03-headless-boot.md)
+2. Boot the bare Pi, SSH in
+3. `./check_power.sh --stress`
+
+Then mount it, knowing the board and the power are good.
+
+**If you'd rather keep your assembly momentum:** mounting is only four screws, so this is
+recoverable rather than irreversible — just make sure you've done check **c** above, so you
+can get the card in and out without disassembly. The risk you're accepting is diagnosing a
+bad Pi or a marginal charger through a fully-built robot, which is a materially worse
+experience.
 
 ## The one ordering trick: centre the servos before you tighten the pan-tilt
 
