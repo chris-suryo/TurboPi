@@ -115,11 +115,14 @@ to reach the robot. Reasoning in
 | [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md) | **The build runbook** — the primary path, no vendor image needed |
 | [`docs/08-robot-api.md`](docs/08-robot-api.md) | **Network API** — MJPEG on :8080, JSON-RPC on :9030 |
 | [`HANDOFF-frontend.md`](HANDOFF-frontend.md) | Paste-ready brief for building a custom UI |
+| [`INTEGRATION-ANSWERS.md`](INTEGRATION-ANSWERS.md) | Integrating the robot as a camera + drivable device in another app |
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
 | [`scripts/check_power.sh`](scripts/check_power.sh) | Power verification. Run on the Pi |
 | [`scripts/check_hardware.py`](scripts/check_hardware.py) | Probes serial, I2C, gpiochip, camera. Run on the Pi |
 | [`scripts/check_opencv_api.py`](scripts/check_opencv_api.py) | Verifies TurboPi's OpenCV calls against the installed version. Run on the Pi |
 | [`scripts/bringup.py`](scripts/bringup.py) | **Staged hardware bring-up** — serial, motors, servos, sensors, camera. Run on the Pi |
+| [`scripts/camera_multireader_test.sh`](scripts/camera_multireader_test.sh) | Can the camera be read from another machine, by more than one reader? Run on the **client** |
+| [`scripts/patch_optional_demos.py`](scripts/patch_optional_demos.py) | Stops a broken mediapipe from blocking the whole robot app |
 
 ## Two bugs that cost an evening each — both configuration, not hardware
 
