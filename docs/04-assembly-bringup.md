@@ -101,10 +101,70 @@ the sandwich is built and bolted into the chassis, **can you still get a card in
 You will reflash this card more than once. Verify it before you tighten anything — I can't
 tell you the answer from here, because it depends on the chassis geometry in front of you.
 
-**d. Seat the 40-pin header fully.** The expansion board connects to the Pi through it, and a
-partially-seated HAT causes intermittent, maddening failures that look like software bugs.
-Press it home evenly before the standoff screws go in — screws should hold a board that's
-already seated, not pull it down.
+**d. Seat the 40-pin header fully.** See the technique section below — this is the single
+most common source of "it worked yesterday" faults.
+
+---
+
+## Which fan, and where it plugs in
+
+**Verified:** Hiwonder's own expansion-board documentation lists board A — the one TurboPi
+uses — as having *"a 4-channel motor interface, a 2-channel bus servo interface, a 6-channel
+PWM servo interface, a 3-channel I2C interface, a 2-channel GPIO interface, two RGB lights, a
+buzzer, two custom buttons, and three signal indicators."* **No fan interface.** (Board B, for
+their humanoid kits, does have one. Board A does not.)
+
+So the cooling fan does **not** connect to the expansion board. It connects to the
+**Raspberry Pi 5's own dedicated fan connector** — item 13 in the Pi 5 feature list in
+Hiwonder's docs, a small 4-pin JST header on the board.
+
+### Telling two fans apart
+
+If you have more than one fan, sort them by connector, not by looks:
+
+| What it has | What it is | Where it goes |
+|---|---|---|
+| **4 wires** (e.g. red / black / yellow / blue) ending in a **small white 4-pin JST plug** | Pi 5-style active cooler: power, ground, tacho, PWM | **The Pi 5's fan header.** This is the one to use |
+| 2–3 wires ending in **Dupont sockets** that push onto individual GPIO pins | Generic case fan (e.g. from a third-party case) | **Nowhere on this robot** — see below |
+
+**A GPIO-pin fan cannot be used here at all.** The expansion board is a HAT that occupies the
+entire 40-pin header, so there are no free pins for it once assembled. If your spare fan is
+the 52Pi case's, set it aside with the case.
+
+The 4-pin header is also the *better* option regardless: the Pi 5 controls that fan's speed
+automatically from SoC temperature, and reads its tacho back. A fan wired to raw 5V just runs
+flat out forever.
+
+> **Don't force a connector that doesn't fit, and don't improvise wiring to the fan header.**
+> Reversing a fan's power and ground can damage it or the Pi. If the plug doesn't match the
+> Pi 5's fan socket cleanly, stop and check before applying pressure.
+
+Note: the Raspberry Pi 5 does **not** include a cooler in its own retail box — it's a separate
+accessory. So a cooler in your parts is either from the kit or from your case purchase; it
+isn't something the Pi brought with it.
+
+---
+
+## Seating the 40-pin header properly
+
+A partially-seated HAT is the classic source of intermittent, maddening faults that look
+exactly like software bugs — the board works, then doesn't, then does.
+
+1. **Align before pressing.** The connector isn't keyed; only the standoffs enforce position.
+   Line the expansion board's 40-hole connector over the Pi's 40 pins and **look along the row
+   from the side** to confirm every pin is entering a hole. Off-by-one-row is the mistake, and
+   it's easy to make and hard to spot afterwards.
+2. **Press straight down, evenly.** Thumbs over the connector itself, directly above the pins
+   — not on the middle of the board, and not on components. Rocking it on corner-first will
+   bend pins.
+3. **Feel for firm, even resistance, then a stop.** It should go down parallel. If one end
+   drops and the other doesn't, lift **straight up** and start again. Don't lever it flat.
+4. **Check the gap.** When seated, the board-to-board distance should match your standoff
+   height (16 mm here). If the standoffs don't line up with their screw holes, the connector
+   isn't home.
+5. **Screws last, and gently.** Standoffs and screws exist to *hold* a board that is already
+   seated, not to pull it down. If you're using screws to close a gap, something is wrong.
+   Nylon threads strip easily — snug, not tight.
 
 ---
 

@@ -4,7 +4,26 @@ No monitor, no micro-HDMI cable. Every command below is labelled with **which te
 belongs in, because a command run in the wrong shell is a wasted hour.
 
 - **PowerShell (PC)** — your Windows 11 machine
+- **Terminal (Mac)** — your MacBook
 - **SSH (Pi)** — a shell on the Raspberry Pi, reached over the network
+
+### Use the MacBook for this, if it's to hand
+
+Either machine works, but the Mac has genuinely less friction for this particular job:
+
+| | macOS | Windows 11 |
+|---|---|---|
+| `ssh` / `scp` | Built in | Built in (OpenSSH client) |
+| `turbopi.local` name resolution | **Bonjour, works reliably** | mDNS support is inconsistent — often needs the raw IP |
+| Raspberry Pi Imager | Native `.dmg` | Native installer |
+
+The `.local` hostname is the difference that matters: on the Mac you type `ssh pi@turbopi.local`
+and it just resolves. On Windows you may end up hunting the Pi's IP in your router's DHCP list
+every time. Nothing about the robot cares which machine you used — the SD card is the same
+either way, and you can switch later.
+
+Commands below are given for both. `ssh`, `scp` and the Imager GUI are identical on each; only
+the shell prompt differs.
 
 ---
 
@@ -80,6 +99,13 @@ image. It is also the base the robot itself will run on — see
 winget install RaspberryPiFoundation.RaspberryPiImager
 ```
 
+**Terminal (Mac):**
+```bash
+brew install --cask raspberry-pi-imager
+```
+
+Or download the installer for either OS from `raspberrypi.com/software`.
+
 ### 2. Configure it for headless boot — the important part
 
 Insert the microSD via your USB reader, launch Imager, then:
@@ -125,8 +151,8 @@ arp -a | Select-String "b8-27-eb|dc-a6-32|e4-5f-01|d8-3a-dd|2c-cf-67"
 
 Those are Raspberry Pi Foundation MAC prefixes. Your router's DHCP client list also works.
 
-**PowerShell (PC):**
-```powershell
+**PowerShell (PC)** or **Terminal (Mac)** — identical command:
+```bash
 ssh pi@turbopi.local
 ```
 
@@ -138,6 +164,11 @@ shell, and everything below runs there.
 **PowerShell (PC)**, from this repo's directory:
 ```powershell
 scp scripts\check_power.sh scripts\check_hardware.py pi@turbopi.local:~/
+```
+
+**Terminal (Mac)** — same thing, forward slashes:
+```bash
+scp scripts/check_power.sh scripts/check_hardware.py pi@turbopi.local:~/
 ```
 
 **SSH (Pi):**
