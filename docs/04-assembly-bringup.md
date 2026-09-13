@@ -140,8 +140,13 @@ flat out forever.
 > Pi 5's fan socket cleanly, stop and check before applying pressure.
 
 Note: the Raspberry Pi 5 does **not** include a cooler in its own retail box — it's a separate
-accessory. So a cooler in your parts is either from the kit or from your case purchase; it
-isn't something the Pi brought with it.
+accessory. So a cooler in your parts came from the kit, a case purchase, or (on an open-box
+board) whoever had it before you.
+
+**Resolved for this build:** the Pi arrived with the **official Raspberry Pi Active Cooler**
+already fitted — silver fins, Raspberry Pi logo on the fan shroud. That's the good one; keep
+it. **Do not pull it off** to swap in the other: it's held by a pre-applied thermal pad, and
+removing it degrades the thermal contact for no gain. The spare black cooler stays in its bag.
 
 ---
 

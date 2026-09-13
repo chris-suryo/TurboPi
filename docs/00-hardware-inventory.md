@@ -6,7 +6,8 @@ Three columns matter here: what you have, what has been **verified**, and what i
 | Item | Notes | Status |
 |---|---|---|
 | Hiwonder TurboPi kit | Mecanum wheels, 2-DOF pan-tilt camera, ultrasonic. $129.99, Micro Center. **No Pi included** | Not yet inspected |
-| Raspberry Pi 5, 8GB | **Open box** — not yet powered on | **Unverified — Phase 1** |
+| Raspberry Pi 5, 8GB | **Open box** — arrived with the **official Raspberry Pi Active Cooler** already fitted (silver fins, Pi logo on the fan). Not yet powered on | **Unverified — Phase 1** |
+| Spare black active cooler | Second cooler, 4-wire JST — unused. Same function, lower spec than the fitted official one | Spare / return with case |
 | 52Pi aluminium case + heatsink fan | **Confirmed unusable on the robot** — the build sandwiches the Pi under 16mm standoffs sized for the kit's active cooler | Return candidate; check window |
 | 128GB microSD + USB reader | | Not yet flashed |
 | Raspberry Pi RTC battery | 2-pin JST on the Pi 5; fit before the sandwich goes together | Not yet fitted |
