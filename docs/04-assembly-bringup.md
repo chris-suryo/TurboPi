@@ -310,6 +310,46 @@ a hurry, because the switch is right there and SSH is a laptop away.
 
 ---
 
+## First power-on: what to expect on a clean OS (and what NOT to)
+
+Hiwonder's docs describe a boot sequence with a **buzzer beep**, the **pan-tilt snapping to
+centre**, and **LED2 blinking once a second**. All of that comes from *their image's* startup
+services (`hw_wifi.service`, `hw_button_scan.service` and the autostarted app).
+
+**We built from clean Raspberry Pi OS, so none of it happens.** On our build:
+
+| Hiwonder image | Our clean build |
+|---|---|
+| Buzzer beeps at boot | **Silent** |
+| Servos centre themselves | **Servos stay limp** until something commands them |
+| LED2 blinks a Wi-Fi status pattern | Expansion board power LED only |
+| `KEY1` runs a self-test | Nothing bound to the buttons |
+| App autostarts | Nothing runs until you run it |
+
+**A silent, motionless robot at boot is correct here, not a fault.** The board's
+microcontroller is powered and listening; nothing is talking to it yet. The first thing that
+does is the bring-up script.
+
+This also means the servo-centring trick has to be done deliberately — power-on won't do it for
+you. `bringup.py` commands the servos to 1500 µs in its servo stage, which is the equivalent.
+
+### Powering from the battery, not USB-C
+
+Once assembled, the Pi is fed through the expansion board from the battery pack.
+**Unplug the USB-C charger.** Don't feed the Pi from two sources at once — back-powering
+through the 5V rail while the board is also supplying it is a good way to find out which
+regulator gives up first.
+
+Power-on order, per Hiwonder:
+
+1. **Battery case switch ON**
+2. **Expansion board switch ON**
+3. Wait ~40 seconds for Linux to boot and rejoin Wi-Fi
+
+Power-down order is the reverse, and `sudo poweroff` comes first — see above.
+
+---
+
 ## Bring-up order
 
 Run each step and confirm before moving on. All of these are **SSH (Pi)**.
