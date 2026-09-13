@@ -53,18 +53,30 @@ Background and how to read the results:
 
 ## Start here
 
-1. **Flash stock Raspberry Pi OS** to your card — [`docs/03-headless-boot.md`](docs/03-headless-boot.md).
-   Username **`pi`**, SSH enabled, Wi-Fi preconfigured.
-2. **SSH in and run** `./check_power.sh --stress`. Paste the output back.
-3. **Open the kit box.** Is there a microSD card, or a booklet with a QR/Drive link?
-   Photograph the expansion board silkscreen — it identifies the board revision.
-4. **Then build the robot software on that same card** —
-   [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md).
+**The robot is built and every subsystem is verified working.** Results:
+[`PHASE1-RESULTS.md`](PHASE1-RESULTS.md).
 
-**You do not need Hiwonder's system image.** Verified: the public repo is self-contained, and
-clean Raspberry Pi OS is a better base for a Pi 5 than their 2023-era image. Emailing them is
-optional — [`docs/image-request-email.md`](docs/image-request-email.md) — and nothing waits on
-a reply.
+Day-to-day:
+
+```bash
+ssh pi@turbopi.local
+cd /home/pi/TurboPi
+~/turbopi-venv/bin/python TurboPi.py     # then open http://10.0.0.3:8080/
+```
+
+To re-verify hardware after any change:
+```bash
+~/turbopi-venv/bin/python ~/bringup.py
+```
+
+**Building something against the robot?** [`docs/08-robot-api.md`](docs/08-robot-api.md) is the
+network API; [`HANDOFF-frontend.md`](HANDOFF-frontend.md) is a ready-to-paste brief for a
+custom UI.
+
+**Rebuilding from scratch?** [`docs/03-headless-boot.md`](docs/03-headless-boot.md) then
+[`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md). You do **not** need
+Hiwonder's system image — the public repo is self-contained and clean Raspberry Pi OS is a
+better base for a Pi 5.
 
 ---
 
@@ -77,7 +89,7 @@ a reply.
 | 2. Physical fit check | ✅ 52Pi case ruled out; RTC battery + board revision pending at mount time |
 | 3. Build robot software on clean Raspberry Pi OS | ✅ **DONE** — all deps installed, I2C + UART enabled, OpenCV 5 verified |
 | 4. Assemble and drive | ✅ **All subsystems verified** — see [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) |
-| 5. Camera and built-in demos | Pending — note the display caveat in `docs/06-running-the-demos.md` |
+| 5. Camera and built-in demos | Camera verified; demos next — see `docs/06-running-the-demos.md` |
 | 6. Concepts | Written, read as you go |
 
 **The image turned out not to be a blocker.** It was initially assessed as one; on checking,
@@ -101,11 +113,25 @@ to reach the robot. Reasoning in
 | [`docs/05-concepts.md`](docs/05-concepts.md) | GPIO/PWM, servos, mecanum kinematics, I2C vs UART |
 | [`docs/06-running-the-demos.md`](docs/06-running-the-demos.md) | Which demos need a display, and how to get one without HDMI |
 | [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md) | **The build runbook** — the primary path, no vendor image needed |
+| [`docs/08-robot-api.md`](docs/08-robot-api.md) | **Network API** — MJPEG on :8080, JSON-RPC on :9030 |
+| [`HANDOFF-frontend.md`](HANDOFF-frontend.md) | Paste-ready brief for building a custom UI |
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
 | [`scripts/check_power.sh`](scripts/check_power.sh) | Power verification. Run on the Pi |
 | [`scripts/check_hardware.py`](scripts/check_hardware.py) | Probes serial, I2C, gpiochip, camera. Run on the Pi |
 | [`scripts/check_opencv_api.py`](scripts/check_opencv_api.py) | Verifies TurboPi's OpenCV calls against the installed version. Run on the Pi |
 | [`scripts/bringup.py`](scripts/bringup.py) | **Staged hardware bring-up** — serial, motors, servos, sensors, camera. Run on the Pi |
+
+## Two bugs that cost an evening each — both configuration, not hardware
+
+**The board was silent.** Hiwonder's manual says `enable_uart=1` + `dtparam=uart0=on`. On a Pi 5
+with a 2025-02-or-later bootloader that leaves UART0 in a state Linux can't take over — RXD0
+stuck `lo` against its pull-up while every other check passed. Fix: **`dtoverlay=uart0-pi5`
+instead, with no `enable_uart=1`.**
+
+**The servos didn't move.** Both connectors were reversed. VCC is the middle pin, so a reversed
+plug still powers the servo — it holds position and resists a nudge, but its signal pin is on
+ground. Diagnostic: **nudge the head by hand.** Resists = powered, so it's signal. Limp = no
+power.
 | [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) | Measured verification results for the Pi and charger |
 | [`NOTES-dog-cam-integration.md`](NOTES-dog-cam-integration.md) | One parked finding. No code |
 
