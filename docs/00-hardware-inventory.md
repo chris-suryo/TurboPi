@@ -9,10 +9,25 @@ Three columns matter here: what you have, what has been **verified**, and what i
 | Raspberry Pi 5, 8GB | **Open box** — arrived with the **official Raspberry Pi Active Cooler** already fitted (silver fins, Pi logo on the fan). Not yet powered on | **Unverified — Phase 1** |
 | Spare black active cooler | Second cooler, 4-wire JST — unused. Same function, lower spec than the fitted official one | Spare / return with case |
 | 52Pi aluminium case + heatsink fan | **Confirmed unusable on the robot** — the build sandwiches the Pi under 16mm standoffs sized for the kit's active cooler | Return candidate; check window |
-| 128GB microSD + USB reader | | Not yet flashed |
+| 128GB microSD + USB reader | Flashed 2026-09-13 with Raspberry Pi OS 64-bit (Imager v2.0.11.1) | **Flashed** |
 | Raspberry Pi RTC battery | 2-pin JST on the Pi 5; fit before the sandwich goes together | Not yet fitted |
 | USB-C charger | Model unknown, label unreadable | **Unverified — Phase 1** |
 | Official 27W PSU | Not purchased | Decision pending on Phase 1 result |
+
+## Bench-test configuration (as flashed)
+
+No secrets recorded here — passwords are not stored in this repo.
+
+| Setting | Value |
+|---|---|
+| OS | Raspberry Pi OS (64-bit), Bookworm |
+| Hostname | `turbopi` → `turbopi.local` |
+| User | `pi` |
+| Wi-Fi SSID | `2101 (2.4 Ghz)` — note the space and lowercase `hz`; the 5GHz SSID is spelled differently (`2101 (5GHz)`) |
+| Band choice | 2.4GHz deliberately — better range for a robot that drives around; the Pi 5 is dual-band so either works |
+| SSH | Enabled, password auth |
+| Raspberry Pi Connect | Not enabled (cloud service, unnecessary for LAN use) |
+| LAN | Router `10.0.0.1`, Mac `10.0.0.63` — expect the Pi on `10.0.0.x` |
 
 ## Host machines
 
