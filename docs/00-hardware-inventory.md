@@ -11,8 +11,8 @@ Three columns matter here: what you have, what has been **verified**, and what i
 | 52Pi aluminium case + heatsink fan | **Confirmed unusable on the robot** — the build sandwiches the Pi under 16mm standoffs sized for the kit's active cooler | Return candidate; check window |
 | 128GB microSD + USB reader | Flashed 2026-09-13 with Raspberry Pi OS 64-bit (Imager v2.0.11.1) | **Flashed** |
 | Raspberry Pi RTC battery | 2-pin JST on the Pi 5; fit before the sandwich goes together | Not yet fitted |
-| USB-C charger | Model unknown, label unreadable | **Unverified — Phase 1** |
-| Official 27W PSU | Not purchased | Decision pending on Phase 1 result |
+| USB-C charger | **Identified: Apple 20W USB-C PD, model A2305.** Output `5V⎓3A` or `9V⎓2.22A`. The Pi 5 only takes 5V, so effectively **15W / 3A** — below the 5A the Pi 5 wants | Usable for bench work; expect the 600mA USB cap |
+| Official 27W PSU | Not purchased | **Probably never needed** — see below |
 
 ## Bench-test configuration (as flashed)
 
@@ -36,8 +36,9 @@ No secrets recorded here — passwords are not stored in this repo.
 
 ## Open questions, resolved by looking rather than guessing
 
-1. **Does the charger negotiate 5V/5A?** You can't read the label, so this comes from the Pi's
-   own USB-PD negotiation report, not a spec sheet. → `scripts/check_power.sh`, Phase 1.
+1. ~~Does the charger negotiate 5V/5A?~~ **RESOLVED: no.** It's an Apple 20W A2305, `5V⎓3A`.
+   The Pi 5 will run on it but caps USB peripherals to 600mA. Remaining question is narrower:
+   does it hold 5V under sustained load? → `scripts/check_power.sh --stress`.
 2. **Is the open-box Pi 5 healthy?** → boot + sustained load test, Phase 1.
 3. **Does the kit include a preloaded microSD, and for which board?** Check the box. The Pi 4B
    and Pi 5 images have different default passwords, which identifies it in one login attempt.
@@ -53,6 +54,24 @@ No secrets recorded here — passwords are not stored in this repo.
    throughout and never show an SSH login, so this is treated as unknown rather than assumed.
    If SSH is off, VNC is the way in and we enable SSH from there. See
    `06-running-the-demos.md` — VNC is wanted for the demos regardless, and needs no HDMI.
+
+## Why the 20W charger probably doesn't matter
+
+The Pi 5 wants 5V/5A. This supply gives 5V/3A, so on the bench the USB peripheral budget will
+be the low one (600mA) unless overridden.
+
+**But the finished robot never uses USB-C power.** The Pi is fed from the expansion board off
+the 7.4V battery pack, a path with no USB-PD negotiation in it at all. So the charger's rating
+governs bench work only, and 15W comfortably covers a bare Pi 5 under CPU load (roughly
+11-13W including the cooler fan).
+
+Buy the 27W supply only if the stress test shows undervoltage, or if you later want to run the
+Pi 5 on the desk with power-hungry USB devices attached.
+
+**Cable matters as much as the brick.** It must be USB-C to USB-C — an Apple 20W often ships
+with USB-C to Lightning, which won't fit. A thin or poor-quality cable is one of the most
+common causes of Pi 5 undervoltage, because the voltage drop happens in the cable rather than
+the supply.
 
 ## Known constraints
 
