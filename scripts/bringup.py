@@ -148,6 +148,8 @@ def _raw_serial_probe():
             info("")
             info("        Look at the expansion board's POWER LED (LED1). If it is")
             info("        dark, the board has no power and nothing else matters.")
+    except Exception as e:                                   # noqa: BLE001
+        info(f"        Raw probe failed: {type(e).__name__}: {e}")
 
 
 def _pin_function_probe():
@@ -169,15 +171,12 @@ def _pin_function_probe():
             info("           so the silence is the board's or the wiring's.")
         else:
             info("        -> GPIO14/15 are NOT in UART mode. The Pi is not driving")
-            info("           the serial pins — this is a Pi-side config problem,")
-            info("           not the robot. Report this output.")
+            info("           the serial pins - a Pi-side config problem, not the")
+            info("           robot. Report this output.")
     except FileNotFoundError:
-        info("        (pinctrl not installed — skip)")
+        info("        (pinctrl not installed - skip)")
     except Exception as e:                                   # noqa: BLE001
         info(f"        (pin probe failed: {type(e).__name__}: {e})")
-    except Exception as e:                                   # noqa: BLE001
-        info(f"        Raw probe failed: {type(e).__name__}: {e}")
-
 
 
 def stage_board():
