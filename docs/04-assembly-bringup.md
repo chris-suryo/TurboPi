@@ -392,11 +392,47 @@ The single most important test. If this works, the whole drivetrain path works.
 ```bash
 cd /home/pi/TurboPi
 ~/turbopi-venv/bin/python -c "
+import time
 import HiwonderSDK.ros_robot_controller_sdk as rrc
 b = rrc.Board()
-print('battery mV:', b.get_battery())
+b.enable_reception()          # REQUIRED - see below
+time.sleep(0.5)
+for _ in range(15):
+    mv = b.get_battery()
+    if mv: print('battery mV:', mv); break
+    time.sleep(0.4)
+else: print('no response')
 "
 ```
+
+> ### `enable_reception()` is mandatory, and omitting it looks like dead hardware
+>
+> `Board.__init__` leaves `self.enable_recv = False`, and the receive thread it starts
+> **discards every incoming byte** until you flip that flag:
+>
+> ```python
+> def recv_task(self):
+>     while True:
+>         if self.enable_recv:      # <- everything is dropped while False
+> ```
+>
+> `get_battery()` then takes a silent early-out:
+>
+> ```python
+> def get_battery(self):
+>     if self.enable_recv:
+>         ...
+>     else:
+>         # print('enable reception first!')   <- the diagnostic is commented out
+>         return None
+> ```
+>
+> So a missing `enable_reception()` returns `None` — **indistinguishable from an unpowered
+> board**. The SDK's own `__main__` calls it on the line right after `Board()`.
+>
+> Note the demos in `Functions/` construct `Board()` *without* it and work fine, because they
+> only ever **send** (motors, servos). Reception is only needed to **read back** — battery,
+> buttons, IMU, servo positions.
 
 A plausible voltage (roughly 6000–8400 mV on charged 18650s) means serial is up, the packet
 protocol matches, and the board's MCU is alive and responding.

@@ -105,6 +105,42 @@ def stage_imports():
 
 
 # ----------------------------------------------------------------- 2. serial
+def _raw_serial_probe():
+    """Listen on the UART for raw bytes. Distinguishes an unpowered/disconnected
+    board (total silence) from a board that is talking but not understood."""
+    try:
+        import serial as _s
+        with _s.Serial("/dev/ttyAMA0", 1000000, timeout=1) as port:
+            got = bytearray()
+            t0 = time.time()
+            while time.time() - t0 < 4:
+                chunk = port.read(256)
+                if chunk:
+                    got.extend(chunk)
+                if len(got) > 512:
+                    break
+        if got:
+            info(f"        Raw listen: {len(got)} bytes received.")
+            info(f"        First bytes: {got[:24].hex(' ')}")
+            if b"\xaa\x55" in bytes(got):
+                info("        Found the 0xAA 0x55 frame header — the board IS alive")
+                info("        and speaking the right protocol. Likely a timing issue;")
+                info("        re-run, and tell the session it got this far.")
+            else:
+                info("        Bytes arrived but no 0xAA 0x55 header — wrong baud rate,")
+                info("        or something else is transmitting on this line.")
+        else:
+            info("        Raw listen: SILENCE — not one byte in 4 seconds.")
+            info("        The board is not transmitting at all. In order of likelihood:")
+            info("          1. Expansion board power switch is OFF")
+            info("          2. Battery pack switch is OFF, or the pack is flat")
+            info("          3. The Pi is running on USB-C while the board is unpowered")
+            info("          4. The 40-pin header is not fully seated")
+    except Exception as e:                                   # noqa: BLE001
+        info(f"        Raw probe failed: {type(e).__name__}: {e}")
+
+
+
 def stage_board():
     """The single most important test: can we talk to the controller MCU?"""
     global BOARD
@@ -119,6 +155,12 @@ def stage_board():
 
     try:
         BOARD = rrc.Board()
+        # REQUIRED. Board.__init__ leaves enable_recv False, and its receive
+        # thread discards everything until this is called. Worse, get_battery()
+        # then returns None via a silent early-out whose diagnostic print is
+        # commented out in the SDK - so a missing call looks exactly like dead
+        # hardware. The SDK's own __main__ calls this immediately after Board().
+        BOARD.enable_reception()
         time.sleep(0.5)
     except Exception as e:                                   # noqa: BLE001
         record("board open", False, f"{type(e).__name__}: {e}")
@@ -126,7 +168,7 @@ def stage_board():
         return False
 
     mv = None
-    for _ in range(6):                    # first read often returns None
+    for _ in range(15):                   # the board pushes sys packets; wait for one
         mv = BOARD.get_battery()
         if mv:
             break
@@ -134,10 +176,9 @@ def stage_board():
 
     if not mv:
         record("battery read", False, "no response from the board")
-        info("The serial port opened but the board never answered. Check:")
-        info("  - expansion board power switch is ON")
-        info("  - battery pack switch is ON and charged")
-        info("  - the Pi's 40-pin header is fully seated")
+        info("Serial opened and reception is enabled, but no packets arrived.")
+        info("Running a raw listen to tell 'board silent' from 'protocol mismatch'...")
+        _raw_serial_probe()
         return False
 
     v = mv / 1000.0

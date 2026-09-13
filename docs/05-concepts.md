@@ -189,3 +189,32 @@ lightness (`L`) from colour (`a`, `b`), so a red ball stays "red" whether it's i
 sunlight. In RGB, changing the lighting changes all three channels at once and your threshold
 falls apart. This is why `lab_config.yaml` exists and why re-calibrating it for your room's
 lighting is usually the fix when colour tracking misbehaves.
+
+
+---
+
+## 6. A debugging lesson from this build: silent failures
+
+While bringing the robot up, `get_battery()` returned nothing and the natural reading was
+"the board is dead." It wasn't. The SDK requires `board.enable_reception()` after `Board()`,
+and without it `get_battery()` returns `None` through a branch whose explanatory `print` is
+commented out.
+
+Two things worth taking from that, because they generalise far beyond this robot:
+
+**A `None` that means "you used me wrong" and a `None` that means "the hardware is gone" are
+indistinguishable to the caller.** That's an API design failure, not a user failure. When you
+write code that talks to hardware, make the two cases *different* — raise on misuse, return a
+sentinel on absence, or at minimum leave the diagnostic message uncommented.
+
+**When a test fails, check whether your test is wrong before you check whether the world is
+wrong.** The temptation was to start unplugging the robot: reseating the header, checking
+switches, suspecting the battery. All of that would have been wasted, because the defect was
+three lines of Python. Reading the SDK was faster than re-seating a connector, and it was
+right.
+
+The fix in `bringup.py` also added a **raw serial probe** for the next time something like this
+happens: if no packets arrive, it listens for raw bytes on the UART. Total silence means the
+board is unpowered or disconnected; bytes without the `0xAA 0x55` frame header mean it's alive
+but being misunderstood. Those are genuinely different problems, and worth distinguishing
+before you pick up a screwdriver.
