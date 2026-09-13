@@ -70,8 +70,20 @@ renumbered. So `HiwonderSDK/led.py` and `key.py`, which hardcode `gpiod.Chip('gp
 are **very likely to fail** on this system — the risk flagged in
 `docs/02-turbopi-pi5-compatibility.md`, now close to confirmed rather than hypothetical.
 
-Blast radius is unchanged and small: the board LED and buttons. Not driving, not servos, not
-the camera, not the sensors. `scripts/check_hardware.py` reports which chip RP1 actually is.
+`check_hardware.py` confirmed it: **RP1 is `gpiochip0`** on this kernel, not `gpiochip4`.
+
+**But this may not actually break anything**, and the first version of the script overstated it.
+The device list also contains a `gpiochip4` node, and Raspberry Pi ships a udev rule that
+creates `/dev/gpiochip4` as a **backward-compatibility symlink** to the real RP1 chip. If that's
+what it is here, `gpiod.Chip('gpiochip4')` resolves to the right chip and the SDK code works
+unmodified.
+
+Settled by one command — `ls -l /dev/gpiochip*` — and the script now resolves symlinks itself
+rather than inferring failure from the chip numbering alone.
+
+Either way the blast radius is small: board LED and buttons. Not driving, not servos, not the
+camera, not the sensors. Even if the symlink saves us today, looking the chip up by label is
+still worth doing, since a udev rule is a weaker guarantee than the kernel.
 
 ## Decisions this settles
 

@@ -94,6 +94,17 @@ def check_gpio():
         return
     info(f"Present: {', '.join(os.path.basename(c) for c in chips)}")
 
+    # Raspberry Pi ships a udev rule that creates /dev/gpiochip4 as a backward
+    # compatibility SYMLINK to the real RP1 chip. A node existing under that name
+    # therefore does not mean the kernel numbered it that way - resolve it.
+    links = {}
+    for c in chips:
+        real = os.path.realpath(c)
+        if real != c:
+            links[os.path.basename(c)] = os.path.basename(real)
+    for name, target in sorted(links.items()):
+        info(f"  {name} -> {target}  (symlink)")
+
     # Map each chip to its label so we can find the RP1 (the 40-pin header on Pi 5).
     labels = {}
     for c in chips:
@@ -124,10 +135,22 @@ def check_gpio():
     if rp1:
         name = rp1[0]
         info(f"RP1 (40-pin header) is: {name}")
+
+        # What would gpiod.Chip('gpiochip4') actually open?
         if name == "gpiochip4":
             ok("Matches the 'gpiochip4' hardcoded in HiwonderSDK/led.py and key.py.")
+        elif links.get("gpiochip4") == name:
+            ok(f"/dev/gpiochip4 is a compatibility symlink to {name}.")
+            ok("  So the hardcoded 'gpiochip4' in led.py/key.py still resolves correctly.")
+            info("  Fragile though: it depends on a udev rule, not the kernel. Worth")
+            info("  looking the chip up by label anyway so it stops mattering.")
+        elif os.path.exists("/dev/gpiochip4"):
+            warn(f"RP1 is {name}, and /dev/gpiochip4 exists but is NOT a symlink to it.")
+            warn("  led.py/key.py would open the wrong chip. Verify before trusting:")
+            warn("    ls -l /dev/gpiochip*")
+            finding(f"gpiochip4 exists but does not point at RP1 ({name}). Check led.py/key.py.")
         else:
-            warn(f"TurboPi hardcodes 'gpiochip4', but RP1 is {name} on this kernel.")
+            warn(f"TurboPi hardcodes 'gpiochip4', but RP1 is {name} and no gpiochip4 exists.")
             warn("  HiwonderSDK/led.py and HiwonderSDK/key.py will fail.")
             warn("  Impact is limited to the board LED and buttons - NOT motors,")
             warn("  NOT servos, NOT the camera, NOT the sensors.")
@@ -189,6 +212,10 @@ def check_serial():
     ports = sorted(glob.glob("/dev/ttyAMA*") + glob.glob("/dev/ttyS*") +
                    glob.glob("/dev/serial*"))
     info(f"Present: {', '.join(os.path.basename(p) for p in ports) or '(none)'}")
+    for prt in ports:
+        real = os.path.realpath(prt)
+        if real != prt:
+            info(f"  {os.path.basename(prt)} -> {os.path.basename(real)}  (symlink)")
 
     if os.path.exists("/dev/ttyAMA0"):
         ok("/dev/ttyAMA0 exists.")

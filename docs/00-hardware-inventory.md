@@ -42,15 +42,19 @@ No secrets recorded here — passwords are not stored in this repo.
 2. ~~Is the open-box Pi 5 healthy?~~ **RESOLVED: yes.** Full results in `PHASE1-RESULTS.md`.
 3. **Does the kit include a preloaded microSD, and for which board?** Check the box. The Pi 4B
    and Pi 5 images have different default passwords, which identifies it in one login attempt.
-4. **Which expansion board revision?** Current source uses a *serial* controller board; older
+4. **Does `/dev/gpiochip4` exist as a compat symlink to RP1 (`gpiochip0`)?** If yes, TurboPi's
+   hardcoded `gpiochip4` works unmodified. Resolved by `ls -l /dev/gpiochip*`.
+5. **What does `/dev/serial0` point to on kernel 6.18?** `ttyAMA0` is absent and `ttyAMA10`
+   exists; need to know what `enable_uart=1` actually produces before wiring the SDK to it.
+6. **Which expansion board revision?** Current source uses a *serial* controller board; older
    TurboPi revisions differ. Determined by looking at the board in Phase 2.
-5. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the
+7. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the
    Pi sandwiched under M2.5×16 standoffs sized to clear an active cooler. A full enclosure
    can't live in that gap. Use the kit's cooler; the case is a return candidate.
-6. ~~Is the kit standard or advanced?~~ **RESOLVED (2026-09-13): standard kit.** The
+8. ~~Is the kit standard or advanced?~~ **RESOLVED (2026-09-13): standard kit.** The
    plain-Python repo on Raspberry Pi OS under `/home/pi` is the correct target. No Docker,
    no ROS2. `07-build-from-clean-os.md` applies as written.
-7. **Is SSH enabled by default on the Hiwonder image?** Unverified. Their docs demonstrate VNC
+9. **Is SSH enabled by default on the Hiwonder image?** Unverified. Their docs demonstrate VNC
    throughout and never show an SSH login, so this is treated as unknown rather than assumed.
    If SSH is off, VNC is the way in and we enable SSH from there. See
    `06-running-the-demos.md` — VNC is wanted for the demos regardless, and needs no HDMI.
