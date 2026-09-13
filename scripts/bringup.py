@@ -131,11 +131,50 @@ def _raw_serial_probe():
                 info("        or something else is transmitting on this line.")
         else:
             info("        Raw listen: SILENCE — not one byte in 4 seconds.")
-            info("        The board is not transmitting at all. In order of likelihood:")
-            info("          1. Expansion board power switch is OFF")
-            info("          2. Battery pack switch is OFF, or the pack is flat")
-            info("          3. The Pi is running on USB-C while the board is unpowered")
-            info("          4. The 40-pin header is not fully seated")
+            info("")
+            info("        Checking whether the Pi is even driving its UART pins...")
+            _pin_function_probe()
+            info("")
+            info("        If the pins are correct, the board is not transmitting.")
+            info("        In order of likelihood:")
+            info("          1. The battery pack's cable is not plugged into the")
+            info("             expansion board's power input. Batteries sitting in")
+            info("             the holder is NOT the same as the board being fed.")
+            info("          2. Expansion board power switch is OFF")
+            info("          3. Battery pack switch is OFF, or the pack is flat")
+            info("          4. The Pi is running on USB-C while the board is unpowered")
+            info("             (the Pi boots happily either way — that proves nothing)")
+            info("          5. The 40-pin header is not fully seated")
+            info("")
+            info("        Look at the expansion board's POWER LED (LED1). If it is")
+            info("        dark, the board has no power and nothing else matters.")
+
+
+def _pin_function_probe():
+    """On a Pi 5, GPIO14/15 must be in their UART alt-function for the header
+    UART to reach the expansion board. This rules the Pi side in or out."""
+    import subprocess
+    try:
+        r = subprocess.run(["pinctrl", "get", "14,15"], capture_output=True,
+                           text=True, timeout=10)
+        out = (r.stdout or r.stderr).strip()
+        if not out:
+            info("        (pinctrl returned nothing)")
+            return
+        for line in out.splitlines():
+            info(f"          {line}")
+        low = out.lower()
+        if "txd" in low and "rxd" in low:
+            info("        -> GPIO14/15 ARE in UART mode. The Pi side is correct,")
+            info("           so the silence is the board's or the wiring's.")
+        else:
+            info("        -> GPIO14/15 are NOT in UART mode. The Pi is not driving")
+            info("           the serial pins — this is a Pi-side config problem,")
+            info("           not the robot. Report this output.")
+    except FileNotFoundError:
+        info("        (pinctrl not installed — skip)")
+    except Exception as e:                                   # noqa: BLE001
+        info(f"        (pin probe failed: {type(e).__name__}: {e})")
     except Exception as e:                                   # noqa: BLE001
         info(f"        Raw probe failed: {type(e).__name__}: {e}")
 
