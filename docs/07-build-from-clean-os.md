@@ -18,37 +18,51 @@ Two of the three buses TurboPi uses are off by default.
 sudo raspi-config nonint do_i2c 0          # 0 means enable
 ```
 
-For the UART, use **Hiwonder's own required configuration** — not just `enable_uart=1`.
+For the UART, **do not follow Hiwonder's manual verbatim.** Their recipe predates current Pi 5
+firmware and it cost us an evening.
 
-> **This is the step that cost us an evening.** `enable_uart=1` alone creates `/dev/ttyAMA0`
-> and puts GPIO14/15 into UART mode (`pinctrl` confirms `a4 // TXD0/RXD0`), so everything
-> *looks* right — but the board stays mute. Hiwonder's expansion-board manual, section 2.1
-> "Raspberry Pi Control Board Tutorial (Must-Read!)", specifies **four** lines, and
-> `dtparam=uart0=on` is the one that actually brings up the peripheral the board talks to.
+> ### What went wrong, so you don't repeat it
+>
+> Hiwonder's expansion-board manual (§2.1) says to add `enable_uart=1` and `dtparam=uart0=on`.
+> On a Pi 5 with a bootloader from **2025-02 or later**, `enable_uart=1` moves the firmware
+> console onto UART0 and leaves the peripheral in a state Linux can't cleanly take over.
+> Symptom: `/dev/ttyAMA0` exists, `pinctrl` shows GPIO14/15 in UART mode, the port opens
+> without error — and **GPIO15 (RXD0) sits stuck `lo` against its pull-up**, so the board can
+> never be heard. Every diagnostic passes except the one that matters.
+>
+> Measured on this build: bootloader dated 2025-06-13, RXD0 stuck `lo` with Hiwonder's lines;
+> flipped to `hi` the moment they were replaced with the Pi 5 overlay.
 
 ```bash
 sudo nano /boot/firmware/config.txt
 ```
 
-Append, verbatim from Hiwonder's manual:
+Append these — and **only** these — for the UART and power:
 
 ```
+dtoverlay=uart0-pi5
 usb_max_current_enable=1
 avoid_warnings=1
-enable_uart=1
-dtparam=uart0=on
 ```
-
-What each one is for:
 
 | Line | Why |
 |---|---|
-| `dtparam=uart0=on` | **The critical one.** Without it the board never answers |
-| `enable_uart=1` | Creates `/dev/ttyAMA0` on the 40-pin header |
-| `usb_max_current_enable=1` | Lifts the USB budget from 600 mA to 1.6 A. Hiwonder ship this because the board feeds the Pi over GPIO, where **no USB-PD negotiation happens** — so the Pi would otherwise always assume the low limit. This is the setting that gives your USB camera room |
-| `avoid_warnings=1` | Suppresses the on-screen undervoltage overlay. Cosmetic and irrelevant headless — it does **not** alter the `get_throttled` flags, so `check_power.sh` still tells the truth |
+| `dtoverlay=uart0-pi5` | **The Pi 5-specific way to put UART0 on GPIO14/15 as `/dev/ttyAMA0`.** Replaces both of Hiwonder's lines. Do **not** also add `enable_uart=1` |
+| `usb_max_current_enable=1` | Lifts the USB budget from 600 mA to 1.6 A. Needed because the board feeds the Pi over GPIO with no USB-PD negotiation, so the Pi would otherwise assume the low limit. This is the headroom the USB camera runs in |
+| `avoid_warnings=1` | Suppresses the on-screen undervoltage overlay only. Irrelevant headless; does not alter `get_throttled` |
 
-Then reboot and verify with `pinctrl get 15`: it should read **`hi`**, not `lo`.
+If `enable_uart=1` is already in the file (Ubuntu images ship it under `[all]`), comment it out.
+
+After reboot, verify:
+
+```bash
+pinctrl get 14,15
+```
+
+Want **`14: a4 ... | hi // TXD0`** and **`15: a4 pu | hi // RXD0`**. RXD0 reading `lo` means the
+firmware still owns the port — check for a stray `enable_uart=1`. Note that `/dev/serial0` will
+point at `ttyAMA10` (the debug UART); that's correct on Pi 5, and the SDK opens `ttyAMA0` by
+name so it doesn't matter.
 
 ### Disable the serial login console
 

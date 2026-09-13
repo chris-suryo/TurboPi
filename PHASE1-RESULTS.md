@@ -113,3 +113,47 @@ device the robot controller uses.
 - **Keep the fitted Active Cooler.** 28°C of thermal headroom at full tilt.
 - **Mounting the Pi is now safe** — the foundations are verified, which was the whole point of
   doing this before assembly.
+
+
+---
+
+# Phase 4 — first hardware bring-up (2026-09-13)
+
+**Result: the robot is alive.** 7/10 stages passed on the first successful run; the three
+"failures" are one skipped stage and two that need a closer look, not blockers.
+
+| Stage | Result |
+|---|---|
+| Serial link to controller board | ✅ **8.01 V** battery read back |
+| Buzzer | ✅ Board acts on commands |
+| Motors, individually | ✅ **All four on the correct ports** — M1 FL, M2 FR, M3 RL, M4 RR |
+| Ultrasonic (0x77) | ✅ 369–380 mm steady, dropped to 112 mm with a hand in front |
+| Line sensor (0x78) | ✅ Reads; all-True is expected on a stand with no surface beneath |
+| USB camera | ✅ 640×480 frame captured |
+| Board RGB LEDs | ❓ Not observed cycling — see below |
+| Mecanum vectors | ⏭ Skipped this run |
+| Pan-tilt servos | ❓ Reported not smooth — needs detail |
+
+## The bug that blocked everything, and its fix
+
+The board was silent for an entire evening. Not hardware — **the Pi's UART config.**
+
+Hiwonder's manual says `enable_uart=1` + `dtparam=uart0=on`. On a Pi 5 whose bootloader is
+from 2025-02 or later (this one: **2025-06-13**), `enable_uart=1` moves the firmware console
+onto UART0 and leaves it in a state Linux cannot fully take over. The signature:
+
+```
+15: a4    pu | lo // GPIO15 = RXD0      ← receive line stuck LOW against its pull-up
+```
+
+Replacing both lines with `dtoverlay=uart0-pi5` flipped it to `hi` on the next boot, and the
+board answered immediately.
+
+What made this hard: **every check passed except the one that mattered.** `/dev/ttyAMA0`
+existed, the pins showed the right alt-function, the port opened, I2C worked through the same
+header, both sensors answered, the board powered the Pi. Three wrong hypotheses were killed
+by evidence (unpowered board, misaligned header, wrong board revision) before a forum search
+for the exact `pinctrl` signature found other Pi 5 owners with the same fault and the fix.
+
+Lesson recorded in `docs/05-concepts.md`: when a vendor recipe is for a fast-moving platform,
+check its date against your firmware's.

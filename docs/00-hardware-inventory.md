@@ -49,8 +49,9 @@ No secrets recorded here — passwords are not stored in this repo.
    creates `/dev/ttyAMA0` **and remaps `/dev/serial0` from `ttyAMA10` to `ttyAMA0`.** So a
    `console=serial0` entry becomes a real conflict with the robot board the moment the UART is
    enabled — removing it was necessary, not merely tidy.
-6. **Which expansion board revision?** Current source uses a *serial* controller board; older
-   TurboPi revisions differ. Determined by looking at the board in Phase 2.
+6. ~~Which expansion board revision?~~ **RESOLVED: "Adapter5A V1.1"** — the serial-controller
+   board the current SDK targets. Confirmed from silkscreen, and by the board answering over
+   serial once the Pi's UART config was corrected.
 7. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the
    Pi sandwiched under M2.5×16 standoffs sized to clear an active cooler. A full enclosure
    can't live in that gap. Use the kit's cooler; the case is a return candidate.
@@ -83,24 +84,21 @@ with USB-C to Lightning, which won't fit. A thin or poor-quality cable is one of
 common causes of Pi 5 undervoltage, because the voltage drop happens in the cable rather than
 the supply.
 
-## The config that actually matters
+## The config that actually matters — corrected
 
-Hiwonder's expansion-board manual §2.1 requires **four** lines in `/boot/firmware/config.txt`:
+**Hiwonder's manual is wrong for current Pi 5 firmware.** Their `enable_uart=1` +
+`dtparam=uart0=on` produced a UART0 that looked configured but had RXD0 stuck low; the board
+could never be heard. Working configuration, measured:
 
 ```
+dtoverlay=uart0-pi5
 usb_max_current_enable=1
 avoid_warnings=1
-enable_uart=1
-dtparam=uart0=on
 ```
 
-Setting only `enable_uart=1` produces a system that passes every check — `/dev/ttyAMA0` exists,
-`pinctrl` shows `a4 // TXD0/RXD0`, the port opens without error — and still cannot talk to the
-board. `dtparam=uart0=on` is required.
-
-`usb_max_current_enable=1` also resolves the 600 mA question from Phase 1 the way Hiwonder
-intends: on the robot the Pi is fed over GPIO with no USB-PD negotiation, so the limit is
-forced rather than negotiated.
+`enable_uart=1` must **not** be present. Bootloader on this board: 2025-06-13, i.e. after the
+2025-02 firmware change that altered `enable_uart` behaviour on Pi 5. Full story in
+`07-build-from-clean-os.md`.
 
 ## Known constraints
 
