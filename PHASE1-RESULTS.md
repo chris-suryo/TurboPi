@@ -130,9 +130,9 @@ device the robot controller uses.
 | Ultrasonic (0x77) | ✅ 369–380 mm steady, dropped to 112 mm with a hand in front |
 | Line sensor (0x78) | ✅ Reads; all-True is expected on a stand with no surface beneath |
 | USB camera | ✅ 640×480 frame captured |
-| Board RGB LEDs | ❓ Not observed cycling — see below |
-| Mecanum vectors | ⏭ Skipped this run |
-| Pan-tilt servos | ❓ Reported not smooth — needs detail |
+| Board RGB LEDs | ✅ Cycled red/green/blue |
+| Mecanum vectors | ✅ All five movements distinct — **roller orientation correct** |
+| Pan-tilt servos | ✅ After fixing reversed connectors — see below |
 
 ## The bug that blocked everything, and its fix
 
@@ -157,3 +157,30 @@ for the exact `pinctrl` signature found other Pi 5 owners with the same fault an
 
 Lesson recorded in `docs/05-concepts.md`: when a vendor recipe is for a fast-moving platform,
 check its date against your firmware's.
+
+
+## Everything passes
+
+Final state: serial, buzzer, RGB, all four motors on correct ports, mecanum vectors, pan-tilt
+servos, ultrasonic, line sensor, camera. Battery steady at 7.97–8.01 V throughout.
+
+### The second bug: reversed servo connectors
+
+Both pan-tilt servos were plugged in backwards. The symptom was misleading in a specific way
+worth remembering:
+
+- The board accepted every command and `pwm_servo_read_position()` echoed the commanded value
+  back — but that is **stored state, not a measurement**. PWM servos have no feedback.
+- The servos were **powered and holding position** — they resisted a nudge — because **VCC is
+  the middle pin** of a servo connector and survives reversal. Only GND and signal swap.
+
+So: powered, holding, deaf. Reversing the plugs fixed both immediately.
+
+The diagnostic that would have found this in five seconds, and now lives in
+`docs/04-assembly-bringup.md`: nudge the head by hand. Resisting means powered, so the fault is
+signal. Limp means unpowered, so the fault is power. One test, two branches, no tools.
+
+### Line sensor reading all-True
+
+Expected on a stand. The sensor reports `True` for "black", and with nothing beneath it there
+is no reflection to detect. It will vary on a floor.

@@ -483,6 +483,30 @@ a motor is on the wrong port.
 Expect some drift. There are no wheel encoders, so the four motors are never perfectly matched.
 This is normal — see `05-concepts.md`.
 
+> ### Servo connector orientation — the one that cost us an hour
+>
+> A 3-pin servo plug fits either way round and **only one is correct**. Get it backwards and
+> the failure is genuinely confusing:
+>
+> **VCC is the middle pin.** So a reversed connector still delivers power — the servo is live
+> and holding position — but its signal pin lands on ground. The result is a servo that
+> *resists being turned by hand* yet never responds to a command. The board meanwhile reports
+> everything as fine, because `pwm_servo_read_position()` echoes back the value the MCU
+> stored; it is **not** a measurement. PWM servos have no position feedback at all.
+>
+> **The five-second diagnostic:** with power on, gently nudge the camera head.
+>
+> | Feel | Meaning |
+> |---|---|
+> | Resists, holds firmly | Powered → it's a **signal** problem → suspect a reversed plug |
+> | Limp, turns freely | Unpowered → it's a **power** problem → reversing won't help |
+>
+> Orientation rule: **brown or black = GND**, matching the `-` / `G` / `GND` silkscreen; red in
+> the middle; orange or yellow = signal.
+>
+> Reversing is not destructive, for the same reason it's confusing — VCC stays on the middle
+> pin, so nothing is ever fed power on a ground line. Power down before re-plugging anyway.
+
 ### Step 5 — pan-tilt servos
 
 ```bash
