@@ -78,13 +78,39 @@ for s in missing:
 if not missing:
     ok(f"All {len(SYMBOLS)} referenced cv2 symbols exist.")
 
-hdr("2. cv2.fisheye (Camera.py uses this at construction time)")
-for s in ["estimateNewCameraMatrixForUndistortRectify", "initUndistortRectifyMap",
-          "calibrate", "CALIB_RECOMPUTE_EXTRINSIC"]:
+hdr("2. cv2.fisheye — runtime path (Camera.py builds these at construction)")
+RUNTIME = ["estimateNewCameraMatrixForUndistortRectify", "initUndistortRectifyMap"]
+for s in RUNTIME:
     if hasattr(cv2, "fisheye") and hasattr(cv2.fisheye, s):
         ok(f"cv2.fisheye.{s}")
     else:
-        bad(f"cv2.fisheye.{s} is MISSING")
+        bad(f"cv2.fisheye.{s} is MISSING — Camera.py cannot construct")
+
+hdr("2b. cv2.fisheye — re-calibration only (CameraCalibration/Calibration.py)")
+info("These are NOT on the runtime path. The repo ships a pre-computed")
+info("calibration_param.npz, so the robot works without them. They matter")
+info("only if you re-calibrate the camera yourself.")
+CALIB = ["calibrate", "CALIB_RECOMPUTE_EXTRINSIC", "CALIB_CHECK_COND",
+         "CALIB_FIX_SKEW"]
+cal_missing = []
+for s in CALIB:
+    if hasattr(cv2, "fisheye") and hasattr(cv2.fisheye, s):
+        ok(f"cv2.fisheye.{s}")
+    else:
+        warn(f"cv2.fisheye.{s} is missing — re-calibration only, not the robot")
+        cal_missing.append(s)
+
+if cal_missing:
+    info("")
+    info("What this install actually offers, so a fix can be written:")
+    fe = [n for n in dir(cv2.fisheye) if "CALIB" in n] if hasattr(cv2, "fisheye") else []
+    info(f"  cv2.fisheye.*CALIB*: {fe or '(none)'}")
+    for name in cal_missing:
+        if hasattr(cv2, name):
+            info(f"  cv2.{name} exists at top level — likely the replacement")
+    tl = [n for n in dir(cv2) if "RECOMPUTE" in n or "FIX_SKEW" in n
+          or "CHECK_COND" in n]
+    info(f"  cv2.* candidates:     {tl or '(none)'}")
 
 hdr("3. VideoWriter_fourcc — the most likely casualty of the 4.x to 5.x bump")
 info("Camera.py:39 calls cv2.VideoWriter_fourcc('Y','U','Y','V')")

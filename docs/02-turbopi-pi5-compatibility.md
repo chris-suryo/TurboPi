@@ -200,3 +200,43 @@ Plus: enable I2C and UART, disable the serial console, use username `pi`, place 
 Driving, line following, colour tracking, colour detection and visual patrol need only `cv2`
 and `numpy`. The riskiest package on arm64 (`mediapipe`) puts **two** demos at risk and blocks
 nothing else — and of the four demos you named, only face tracking touches it.
+
+
+---
+
+## OpenCV 5 compatibility (measured, 2026-09-13)
+
+Debian 13 ships **OpenCV 5.0.0**; TurboPi's code targets 4.x. Tested with
+`scripts/check_opencv_api.py` on the actual install.
+
+**Result: the robot is unaffected.** All 45 referenced `cv2` symbols exist, and every runtime
+pipeline works — LAB conversion, thresholding, morphology, contour finding, JPEG encoding for
+the MJPEG stream, and the fisheye undistort maps `Camera.__init__` builds.
+
+Two predictions worth recording honestly:
+
+- **`cv2.VideoWriter_fourcc` survived.** I expected this to be the casualty of the 4→5 bump.
+  It works and returns the correct FourCC. Wrong call on my part.
+- **`findContours(...)[-2]` still holds** — returns 2 values on 5.0, so the idiom resolves
+  correctly. Every colour demo depends on this.
+
+### The one gap: `cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC` is missing
+
+Used in exactly one place — `CameraCalibration/Calibration.py:19`, the **re-calibration tool**:
+
+```python
+calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + \
+                    cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW
+```
+
+**Not on the runtime path.** `Camera.py` imports only `CalibrationConfig.py` (which contains
+paths), loads the pre-computed `calibration_param.npz` that ships in the repo, and calls only
+`estimateNewCameraMatrixForUndistortRectify` and `initUndistortRectifyMap` — both of which
+work.
+
+**Consequence:** the robot runs normally with the factory calibration. You cannot *re-generate*
+a calibration until this is fixed, which matters only if you swap the lens or want to improve
+on the shipped parameters.
+
+Where the flag went in OpenCV 5 could not be established from the release notes, so the check
+script enumerates what the installed build actually exposes rather than assuming a rename.
