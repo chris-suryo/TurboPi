@@ -75,7 +75,7 @@ sudo reboot
 sudo apt update
 sudo apt install -y \
   python3-opencv python3-numpy python3-yaml python3-serial \
-  python3-libgpiod python3-pil python3-pandas \
+  python3-libgpiod python3-pil python3-pandas python3-smbus \
   i2c-tools v4l-utils libzbar0 git
 ```
 
@@ -199,14 +199,19 @@ Two specifics it's looking for:
 ### Verify every dependency at once
 
 ```bash
-for m in cv2 numpy yaml serial gpiod PIL pandas smbus2 pyzbar jsonrpc werkzeug mediapipe; do
+for m in cv2 numpy yaml serial gpiod PIL pandas smbus smbus2 pyzbar jsonrpc werkzeug mediapipe; do
   ~/turbopi-venv/bin/python -c "import $m" 2>/dev/null \
     && echo "  OK   $m" || echo "  FAIL $m"
 done
 ```
 
-`cv2`, `numpy`, `serial`, `gpiod`, `yaml`, `PIL` and `pandas` come from apt and are visible
-through `--system-site-packages`; the rest come from pip inside the venv. A `FAIL` on
+`cv2`, `numpy`, `serial`, `gpiod`, `yaml`, `PIL`, `pandas` and `smbus` come from apt and are
+visible through `--system-site-packages`; the rest come from pip inside the venv.
+
+> **`smbus` and `smbus2` are different modules and you need both.** `HiwonderSDK/Sonar.py`
+> imports `smbus2` (pip); `HiwonderSDK/FourInfrared.py` imports plain `smbus`, which comes
+> from the apt package `python3-smbus`. Miss it and the line-following sensor fails on import
+> while everything else works. A `FAIL` on
 `mediapipe` costs you face and gesture tracking only — see the risk table above.
 
 Expect: `/dev/ttyAMA0` present, `/dev/i2c-1` present, **no serial-getty on ttyAMA0**, gpiochip

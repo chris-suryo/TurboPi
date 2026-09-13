@@ -173,7 +173,7 @@ owners, which would get you the image without involving support at all.
 The dependency set, enumerated from every third-party import rather than guessed:
 
 ```
-opencv-python  numpy  mediapipe  pyserial  smbus2  gpiod
+opencv-python  numpy  mediapipe  pyserial  smbus  smbus2  gpiod
 PyYAML  pillow  pyzbar  pandas  json-rpc  werkzeug
 ```
 
@@ -195,6 +195,7 @@ Plus: enable I2C and UART, disable the serial console, use username `pi`, place 
 | `mediapipe` | `FaceTracking.py`, `GestureRecognition.py` only | Those two demos |
 | `pyzbar` | `QuickMark.py` only | QR reading |
 | `pandas` | `Avoidance.py` only | One demo |
+| `smbus` (apt `python3-smbus`) | `FourInfrared.py` only | **Line following.** Distinct from `smbus2` — you need both |
 | `cv2`, `numpy` | everything | Genuinely required |
 
 Driving, line following, colour tracking, colour detection and visual patrol need only `cv2`
