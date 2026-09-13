@@ -57,9 +57,9 @@ No secrets recorded here — passwords are not stored in this repo.
 8. ~~Is the kit standard or advanced?~~ **RESOLVED (2026-09-13): standard kit.** The
    plain-Python repo on Raspberry Pi OS under `/home/pi` is the correct target. No Docker,
    no ROS2. `07-build-from-clean-os.md` applies as written.
-9. **Where did `cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC` go in OpenCV 5?** Affects camera
-   re-calibration only, not the robot. Not documented in the release notes; resolve by
-   enumerating what the install exposes (`check_opencv_api.py` does this).
+9. ~~Where did `cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC` go in OpenCV 5?~~ **RESOLVED: all three
+   fisheye calibration flags moved to the top-level `cv2.*` namespace.** One-line fix recorded
+   in `02-turbopi-pi5-compatibility.md`; affects re-calibration only, not the robot.
 10. **Is SSH enabled by default on the Hiwonder image?** Unverified. Their docs demonstrate VNC
    throughout and never show an SSH login, so this is treated as unknown rather than assumed.
    If SSH is off, VNC is the way in and we enable SSH from there. See

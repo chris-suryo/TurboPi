@@ -74,8 +74,8 @@ a reply.
 |---|---|
 | 0. Request the image from Hiwonder | **Optional** — not on the critical path |
 | 1. Verify Pi 5 + charger | ✅ **PASSED** — see [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) |
-| 2. Physical fit check (52Pi case, RTC battery, board revision) | Pending |
-| 3. Build robot software on clean Raspberry Pi OS | Ready — `docs/07-build-from-clean-os.md` |
+| 2. Physical fit check | ✅ 52Pi case ruled out; RTC battery + board revision pending at mount time |
+| 3. Build robot software on clean Raspberry Pi OS | ✅ **DONE** — all deps installed, I2C + UART enabled, OpenCV 5 verified |
 | 4. Assemble and drive | Pending |
 | 5. Camera and built-in demos | Pending — note the display caveat in `docs/06-running-the-demos.md` |
 | 6. Concepts | Written, read as you go |

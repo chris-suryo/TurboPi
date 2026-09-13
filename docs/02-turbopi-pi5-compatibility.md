@@ -238,5 +238,38 @@ work.
 a calibration until this is fixed, which matters only if you swap the lens or want to improve
 on the shipped parameters.
 
-Where the flag went in OpenCV 5 could not be established from the release notes, so the check
-script enumerates what the installed build actually exposes rather than assuming a rename.
+**Resolved by enumerating the installed build** (the release notes don't mention it):
+
+```
+cv2.fisheye.*CALIB*  ->  (none)
+cv2.CALIB_RECOMPUTE_EXTRINSIC, cv2.CALIB_CHECK_COND, cv2.CALIB_FIX_SKEW  ->  all present
+```
+
+**All three fisheye calibration flags moved from `cv2.fisheye.*` to the top-level `cv2.*`
+namespace in OpenCV 5.** `cv2.fisheye.calibrate` itself still exists — only the flag constants
+relocated.
+
+### The fix, if you ever re-calibrate
+
+One line. `CameraCalibration/Calibration.py:19`:
+
+```python
+# OpenCV 4.x (as shipped):
+calibration_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + \
+                    cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW
+
+# OpenCV 5.x:
+calibration_flags = cv2.CALIB_RECOMPUTE_EXTRINSIC + \
+                    cv2.CALIB_CHECK_COND + cv2.CALIB_FIX_SKEW
+```
+
+Version-agnostic form, if you'd rather it work on both:
+
+```python
+_fe = cv2.fisheye if hasattr(cv2.fisheye, "CALIB_RECOMPUTE_EXTRINSIC") else cv2
+calibration_flags = (_fe.CALIB_RECOMPUTE_EXTRINSIC + _fe.CALIB_CHECK_COND
+                     + _fe.CALIB_FIX_SKEW)
+```
+
+**Not needed now** — the factory calibration ships in the repo and the runtime path doesn't
+touch these. Apply it only if you re-calibrate.
