@@ -42,10 +42,13 @@ No secrets recorded here — passwords are not stored in this repo.
 2. ~~Is the open-box Pi 5 healthy?~~ **RESOLVED: yes.** Full results in `PHASE1-RESULTS.md`.
 3. **Does the kit include a preloaded microSD, and for which board?** Check the box. The Pi 4B
    and Pi 5 images have different default passwords, which identifies it in one login attempt.
-4. **Does `/dev/gpiochip4` exist as a compat symlink to RP1 (`gpiochip0`)?** If yes, TurboPi's
-   hardcoded `gpiochip4` works unmodified. Resolved by `ls -l /dev/gpiochip*`.
-5. **What does `/dev/serial0` point to on kernel 6.18?** `ttyAMA0` is absent and `ttyAMA10`
-   exists; need to know what `enable_uart=1` actually produces before wiring the SDK to it.
+4. ~~Does `/dev/gpiochip4` exist as a compat symlink?~~ **RESOLVED: yes.**
+   `/dev/gpiochip4 -> gpiochip0`. TurboPi's hardcoded `gpiochip4` works **unmodified**. The
+   gpiochip risk tracked through this project does not apply on this system.
+5. **What does `enable_uart=1` produce on kernel 6.18?** Partly resolved: `/dev/serial0 ->
+   ttyAMA10`, the Pi 5's *debug* UART, **not** the 40-pin header UART. `enable_uart=1` should
+   create `/dev/ttyAMA0` on GPIO 14/15 — verify empirically after the reboot rather than
+   assuming, since the alias behaviour differs from Pi 4.
 6. **Which expansion board revision?** Current source uses a *serial* controller board; older
    TurboPi revisions differ. Determined by looking at the board in Phase 2.
 7. ~~Does the 52Pi case fit the build?~~ **RESOLVED: no.** The kit's step-2 diagram shows the

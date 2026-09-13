@@ -78,12 +78,20 @@ creates `/dev/gpiochip4` as a **backward-compatibility symlink** to the real RP1
 what it is here, `gpiod.Chip('gpiochip4')` resolves to the right chip and the SDK code works
 unmodified.
 
-Settled by one command — `ls -l /dev/gpiochip*` — and the script now resolves symlinks itself
-rather than inferring failure from the chip numbering alone.
+**Confirmed by `ls -l /dev/gpiochip*`:**
 
-Either way the blast radius is small: board LED and buttons. Not driving, not servos, not the
-camera, not the sensors. Even if the symlink saves us today, looking the chip up by label is
-still worth doing, since a udev rule is a weaker guarantee than the kernel.
+```
+lrwxrwxrwx 1 root root 9 ... /dev/gpiochip4 -> gpiochip0
+```
+
+**It is the compatibility symlink. No patch needed.** `HiwonderSDK/led.py` and `key.py` work
+unmodified on this system. The risk flagged throughout this project turns out not to apply
+here — the udev rule absorbs it.
+
+Worth keeping in mind rather than forgetting: this rests on a **udev rule, not the kernel**, so
+it is a weaker guarantee than the chip numbering would be. If a future update drops the rule,
+those two modules break — LED and buttons only. Looking the chip up by label is still the
+durable fix, just no longer urgent.
 
 ## Decisions this settles
 

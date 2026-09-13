@@ -31,11 +31,19 @@ Ensure this line is present, uncommented:
 enable_uart=1
 ```
 
-### Disable the serial login console — do not skip this
+### Disable the serial login console
 
-By default Linux may run a **login prompt** on the same UART. It and the robot board will both
-try to use `/dev/ttyAMA0`, and the symptom is intermittently corrupted motor commands — which
-looks like flaky hardware and is miserable to debug.
+By default a kernel console and login prompt are routed to a serial port. If that port is the
+same one the robot board uses, both fight over it and the symptom is intermittently corrupted
+motor commands — which looks like flaky hardware and is miserable to debug.
+
+**On the Pi 5 specifically**, measured on this board: `/dev/serial0 -> ttyAMA10`, which is the
+Pi 5's dedicated **debug UART** (the 3-pin JST connector), *not* the 40-pin header UART that
+`enable_uart=1` exposes as `ttyAMA0`. So the console may well not conflict at all.
+
+**Remove it anyway.** The cost is zero — you have no debug cable and aren't using a serial
+console — and it eliminates the whole class of failure without needing to be certain about
+which UART the alias points to after a config change.
 
 ```bash
 sudo systemctl disable --now serial-getty@ttyAMA0.service

@@ -83,9 +83,16 @@ chip by its label instead of its number.
 
 `scripts/check_hardware.py` detects this specific mismatch and tells you which chip RP1 is on.
 
-Hiwonder's own image pins a known-good kernel, which is why `gpiochip4` is correct there. On a
-current stock Raspberry Pi OS — the path we're taking — expect to fix this one line.
-`07-build-from-clean-os.md` covers it, including a misleading error message it produces.
+**Update — measured on the actual board (kernel 6.18, Debian 13):** RP1 is `gpiochip0`, *but*
+Raspberry Pi ships a udev rule creating `/dev/gpiochip4` as a symlink to it:
+
+```
+/dev/gpiochip4 -> gpiochip0
+```
+
+So **`gpiod.Chip('gpiochip4')` resolves correctly and no patch is needed.** This risk did not
+materialise. It rests on a udev rule rather than the kernel, so it could return if that rule is
+ever dropped — affecting only the board LED and buttons — but there is nothing to do today.
 
 ### Minor: hardcoded path
 
