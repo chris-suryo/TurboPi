@@ -264,6 +264,43 @@ two and the robot will move in genuinely confusing ways (a classic symptom: comm
 from above. Get one wheel mirrored and omnidirectional motion breaks in a way that looks like a
 software bug. Check this before the first drive test.
 
+## Powering down safely — build this habit now
+
+**Never cut power to a running Pi.** The OS buffers writes in RAM and flushes them lazily;
+pulling power mid-flush corrupts the filesystem. Sometimes it's survivable, sometimes the card
+needs reflashing, and the failure often shows up days later as something that looks like a
+software bug.
+
+**Always:**
+
+```bash
+sudo poweroff
+```
+
+Wait for the green activity LED to stop flickering and settle (about 10 seconds), then pull
+the plug. The Pi 5 also has a physical **power button** — a short press triggers the same
+graceful shutdown, and another press boots it again.
+
+### Why this matters more on a robot than on a desk
+
+**The expansion board's power switch cuts power instantly.** It is electrically identical to
+yanking the cable — the Pi gets no warning and no chance to flush.
+
+So the operating sequence for the finished robot is always:
+
+1. `sudo poweroff` over SSH
+2. Wait for the LED to settle
+3. *Then* flip the expansion board switch off
+
+Getting this backwards is the most likely way you'll corrupt this SD card. It's easy to do in
+a hurry, because the switch is right there and SSH is a laptop away.
+
+> If you want a safety net later, a script bound to one of the board's buttons can trigger
+> `poweroff` so you can shut down without a laptop. Hiwonder's own image does this with KEY2
+> (long press to shut down); we could add the equivalent once the robot is running.
+
+---
+
 ### Battery safety
 
 - Charge the two 18650s fully before first use (~3 hours; the charger LED goes green)

@@ -108,6 +108,12 @@ to reach the robot. Reasoning in
 | [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) | Measured verification results for the Pi and charger |
 | [`NOTES-dog-cam-integration.md`](NOTES-dog-cam-integration.md) | One parked finding. No code |
 
+## Operating rule
+
+**Always `sudo poweroff` and wait for the LED to settle before cutting power** — including
+before flipping the expansion board's switch, which cuts power instantly with no warning to
+the OS. Yanking power from a running Pi is the most common cause of a corrupted SD card.
+
 ## Conventions
 
 - Every command is labelled **PowerShell (PC)** or **SSH (Pi)**. No guessing which shell.
