@@ -277,6 +277,18 @@ software bug. Check this before the first drive test.
 
 Run each step and confirm before moving on. All of these are **SSH (Pi)**.
 
+> **Use `~/turbopi-venv/bin/python`, not `python3`.** The robot's dependencies live in that
+> virtualenv. Some modules (`serial`, `cv2`, `gpiod`) come from apt and *are* visible to the
+> system interpreter, but others (`smbus2`, `jsonrpc`, `werkzeug`, `pyzbar`, `mediapipe`) are
+> pip-installed into the venv and are not. So `python3` works for some of these steps and
+> fails on others — which is worse than failing consistently. Use the venv path throughout.
+>
+> If the long path grates:
+> ```bash
+> echo "alias tpy='~/turbopi-venv/bin/python'" >> ~/.bashrc && source ~/.bashrc
+> ```
+> then `tpy -c "..."` everywhere below.
+
 > **Note on `KEY1`.** Hiwonder's docs say pressing **KEY1** on the expansion board runs a
 > built-in self-test that exercises every servo and motor in a known order — a genuinely good
 > wiring check. **It won't exist on our clean-OS build**, because it's provided by their
@@ -287,7 +299,7 @@ Run each step and confirm before moving on. All of these are **SSH (Pi)**.
 ### Step 0 — interfaces present
 
 ```bash
-./check_hardware.py
+~/turbopi-venv/bin/python ~/check_hardware.py
 ```
 
 Confirms `/dev/ttyAMA0`, `/dev/i2c-1`, the gpiochip layout, the camera, and — importantly —
@@ -302,7 +314,7 @@ The single most important test. If this works, the whole drivetrain path works.
 
 ```bash
 cd /home/pi/TurboPi
-python3 -c "
+~/turbopi-venv/bin/python -c "
 import HiwonderSDK.ros_robot_controller_sdk as rrc
 b = rrc.Board()
 print('battery mV:', b.get_battery())
@@ -320,7 +332,7 @@ unpowered, or the power switch is off. Don't proceed until this returns a number
 **Put the robot on a stand so the wheels can't touch the ground.** It will try to drive away.
 
 ```bash
-python3 -c "
+~/turbopi-venv/bin/python -c "
 import HiwonderSDK.ros_robot_controller_sdk as rrc, time
 b = rrc.Board()
 b.set_motor_duty([[1, 35]]); time.sleep(1); b.set_motor_duty([[1, 0]])
@@ -336,7 +348,7 @@ Still on the stand:
 
 ```bash
 cd /home/pi/TurboPi/MecanumControl
-python3 Car_Forward_Demo.py
+~/turbopi-venv/bin/python Car_Forward_Demo.py
 ```
 
 All four wheels should turn in the direction that would drive it forward.
@@ -346,9 +358,9 @@ All four wheels should turn in the direction that would drive it forward.
 Now on the ground, with space:
 
 ```bash
-python3 Car_Move_Demo.py      # general motion
-python3 Car_Slant_Demo.py     # diagonal — the mecanum party trick
-python3 Car_Turn_Demo.py      # rotation in place
+~/turbopi-venv/bin/python Car_Move_Demo.py      # general motion
+~/turbopi-venv/bin/python Car_Slant_Demo.py     # diagonal — the mecanum party trick
+~/turbopi-venv/bin/python Car_Turn_Demo.py      # rotation in place
 ```
 
 `Car_Slant_Demo.py` is the one that proves the wheels are mounted correctly: the robot should
@@ -361,7 +373,7 @@ This is normal — see `05-concepts.md`.
 ### Step 5 — pan-tilt servos
 
 ```bash
-python3 -c "
+~/turbopi-venv/bin/python -c "
 import HiwonderSDK.ros_robot_controller_sdk as rrc, time
 b = rrc.Board()
 b.pwm_servo_set_position(0.5, [[1, 1500], [2, 1500]])  # both to centre
@@ -378,7 +390,7 @@ stalled servo draws maximum current and strips its own gears.
 ### Step 6 — ultrasonic sensor
 
 ```bash
-python3 -c "
+~/turbopi-venv/bin/python -c "
 import HiwonderSDK.Sonar as Sonar, time
 s = Sonar.Sonar()
 for _ in range(10):
@@ -391,7 +403,7 @@ Put your hand in front of it and watch the number drop.
 ### Step 7 — line sensor
 
 ```bash
-python3 -c "
+~/turbopi-venv/bin/python -c "
 import HiwonderSDK.FourInfrared as FI, time
 l = FI.FourInfrared()
 for _ in range(10):

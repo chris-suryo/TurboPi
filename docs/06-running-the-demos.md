@@ -50,10 +50,13 @@ Fully headless, no VNC:
 
 ```bash
 cd /home/pi/TurboPi
-python3 TurboPi.py
+~/turbopi-venv/bin/python TurboPi.py
 ```
 
 Then open `http://<pi-ip>:8080/` in any browser on your LAN.
+
+`TurboPi.py` needs `jsonrpc` and `werkzeug`, which are pip-installed into the venv — so it
+**must** run under `~/turbopi-venv/bin/python`. Bare `python3` fails on import.
 
 You're using the packaged application rather than the individual demo scripts — control is via
 the WonderPi phone app or the JSON-RPC API on port 9030. Great for "is the camera working",
