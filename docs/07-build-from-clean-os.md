@@ -170,6 +170,24 @@ cd /home/pi/TurboPi
 ~/turbopi-venv/bin/python ~/check_hardware.py
 ```
 
+> **Run it with the venv's Python, not `./check_hardware.py`.** The bare form uses the *system*
+> interpreter, which cannot see anything pip-installed into `~/turbopi-venv` — so it reports
+> `smbus2`, `pyzbar` and `mediapipe` as missing even when they're correctly installed. Same
+> script, different interpreter, different answer.
+
+### Verify every dependency at once
+
+```bash
+for m in cv2 numpy yaml serial gpiod PIL pandas smbus2 pyzbar jsonrpc werkzeug mediapipe; do
+  ~/turbopi-venv/bin/python -c "import $m" 2>/dev/null \
+    && echo "  OK   $m" || echo "  FAIL $m"
+done
+```
+
+`cv2`, `numpy`, `serial`, `gpiod`, `yaml`, `PIL` and `pandas` come from apt and are visible
+through `--system-site-packages`; the rest come from pip inside the venv. A `FAIL` on
+`mediapipe` costs you face and gesture tracking only — see the risk table above.
+
 Expect: `/dev/ttyAMA0` present, `/dev/i2c-1` present, **no serial-getty on ttyAMA0**, gpiochip
 labels listed, pyserial and smbus2 importable.
 
