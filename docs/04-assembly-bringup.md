@@ -6,7 +6,67 @@ failure could be any of eight things, and you'll spend the evening bisecting har
 
 ---
 
-## Before assembly: two fit checks
+## Follow the video, not the written steps
+
+Hiwonder's written assembly section is **step titles only** — all the actual detail is in
+images and video. They link a playlist, and it is the thing to follow:
+
+**https://www.youtube.com/playlist?list=PLFbzd0m6AcmLzo53o2Tsa20BS350rWGMj**
+
+Their step order, for orientation while you watch:
+
+1. Ultrasonic sensor and pan-tilt servo
+2. Mecanum wheel chassis
+3. Line follower
+4. Pan-tilt servo bracket
+5. Raspberry Pi 5 and expansion board
+6. Ultrasonic + line follower wiring
+7. Battery box
+8. U-shaped bracket and mecanum wheels
+9. Head servo and camera
+10. Wiring
+11. Top bracket
+
+This doc does **not** duplicate the mechanical steps — the video is better at that than prose
+ever will be. What follows is the set of things the video won't flag: the traps, the wiring
+table, and one ordering trick that saves you a calibration session.
+
+---
+
+## While you have the box open — four things to check
+
+Quick, and each one answers a question that's currently open:
+
+1. **Is there a microSD card?** If so, don't wipe it — it may be a working image. We'd image
+   it to a file first and see which board it targets.
+2. **Is there a booklet with a QR code / Drive link?** Hiwonder put the "Source code and
+   system image" download there for kit owners. If it's there, you skip emailing support.
+3. **Photograph the expansion board silkscreen.** Confirms whether you have the current
+   serial-controller board or an older I2C-era revision.
+4. **Which kit tier is it — standard or advanced?** Check the box art / model number. This
+   one's new: see below.
+
+### Standard vs advanced — why it matters (later, not now)
+
+There are two TurboPi software tiers, and they're genuinely different stacks:
+
+| | Standard | Advanced |
+|---|---|---|
+| Software | Plain Python, `github.com/Hiwonder/turbopi` | **Docker + ROS2** |
+| OS / user | Raspberry Pi OS, `/home/pi` | Ubuntu, `/home/ubuntu` |
+| Public source? | **Yes, fully** | No — distributed as container images |
+
+Everything in this project targets the **standard** tier, which is almost certainly what a
+$129.99 no-Pi kit is, and which contains every demo on your list — line following, colour
+tracking, face tracking, obstacle avoidance.
+
+**The hardware and the assembly are the same either way**, so this changes nothing today. It
+only matters if you later want the ROS2 / AI-model features, which do require Hiwonder's
+containers and can't be rebuilt from the public repo.
+
+---
+
+## Before assembly: three fit checks
 
 ### 1. The 52Pi aluminium case almost certainly has to come off
 
@@ -38,12 +98,40 @@ you need differs. Photograph the board and we'll confirm which you have rather t
 
 ---
 
-## Assembly
+## The one ordering trick: centre the servos before you tighten the pan-tilt
 
-Follow Hiwonder's own printed/online assembly guide for the mechanical build — it has the
-exploded diagrams and correct screw lengths, and there's no value in paraphrasing it here.
+**Do this and you skip a whole calibration session.**
 
-**Wiring, from the official docs — get these right:**
+Hiwonder's servos **auto-centre when the board powers on**. If you bolt the U-shaped bracket
+onto the servo shaft while the servo happens to be sitting at some arbitrary angle, your
+pan-tilt ends up permanently offset — and the software trim range is only **1372–1627 µs**
+(about **±13°**) around the 1500 µs centre. Outside that, software can't save you and you have
+to take it apart again.
+
+Hiwonder document this only as an *after-the-fact repair* ("calibrate large deviation"):
+
+> Power off → remove the screw on the servo's main shaft → pull the bracket off → power on and
+> let the servo self-centre → power off → refit the bracket square → replace the screw.
+
+Notice that's just "let it centre before you attach the bracket." **So do it in that order the
+first time:**
+
+1. Assemble up to the point where the servos are mounted but the brackets are **not yet
+   screwed down**.
+2. Power the board on. Servos snap to centre; the buzzer beeps.
+3. Power off.
+4. Fit the brackets square to the centred servos, then screw them down.
+
+> **Do not rotate a servo by hand while it's powered.** It actively fights you, and the gears
+> are plastic. If you nudge one during step 4, power-cycle and let it re-centre.
+
+Fine trim after that is a software offset, covered when we do bring-up.
+
+---
+
+## Assembly wiring
+
+The mechanical steps are in the video. These are the connections to get right:
 
 | Connection | Port |
 |---|---|
@@ -76,6 +164,13 @@ software bug. Check this before the first drive test.
 ## Bring-up order
 
 Run each step and confirm before moving on. All of these are **SSH (Pi)**.
+
+> **Note on `KEY1`.** Hiwonder's docs say pressing **KEY1** on the expansion board runs a
+> built-in self-test that exercises every servo and motor in a known order — a genuinely good
+> wiring check. **It won't exist on our clean-OS build**, because it's provided by their
+> image's `hw_button_scan.service`. The staged bring-up below replaces it, and is more
+> informative anyway: the self-test tells you *something* is wrong, while these steps tell you
+> *which* thing.
 
 ### Step 0 — interfaces present
 
