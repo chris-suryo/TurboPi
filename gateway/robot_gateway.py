@@ -68,7 +68,12 @@ TTL_MIN_MS, TTL_MAX_MS = 100, 2000
 # Never tested against the real sensor -- see docs/09-gateway.md before trusting it.
 SONAR_STOP_MM = int(os.environ.get("TURBOPI_SONAR_STOP_MM", "250"))
 SONAR_MAX_AGE_S = 0.75        # older than this and the guard has nothing to go on
-SONAR_POLL_IDLE_S = 1.0
+# Must stay BELOW SONAR_MAX_AGE_S. It was 1.0 against a 0.75 s window, which meant the
+# cached reading was stale more often than not while the robot sat still -- so the guard
+# was silently off for the first drive command after any pause, which is exactly the
+# moment someone pushes forward at something parked in front of the robot. Found by a
+# test that flaked on timing rather than by reading the code.
+SONAR_POLL_IDLE_S = 0.5
 SONAR_POLL_DRIVING_S = 0.2    # only while a command is live; the guard needs fresh data
 WS_TELEMETRY_S = 1.0
 TELEMETRY_CACHE_S = 0.5          # contract: cache RPC answers for 500 ms
@@ -87,6 +92,7 @@ PAN_SIGN = int(os.environ.get("TURBOPI_PAN_SIGN", "-1"))
 TILT_SIGN = int(os.environ.get("TURBOPI_TILT_SIGN", "-1"))
 SERVO_TILT, SERVO_PAN = 1, 2     # confirmed from Functions/ColorTracking.py: servo_x = servo2
 LOOK_LIMIT_DEG = 45.0
+LOOK_MOVE_MIN_MS, LOOK_MOVE_MAX_MS = 50, 2000
 LOOK_MOVE_MS = 300
 
 # RPC timeouts. Motor writes are a serial write and return fast. Anything routed through
@@ -250,10 +256,11 @@ class RobotRPC:
     async def stop_func(self) -> Any:
         return await self.call("StopFunc", urgent=True, timeout=RPC_TIMEOUT_SLOW_S)
 
-    async def set_servos(self, pairs: list[tuple[int, float]]) -> None:
+    async def set_servos(self, pairs: list[tuple[int, float]],
+                         move_ms: int = LOOK_MOVE_MS) -> None:
         # SetPWMServo(use_time_ms, <ignored>, servo, angle, servo, angle, ...).
         # args[1] is skipped by the server's own argument slicing; pass 1.
-        params: list[Any] = [LOOK_MOVE_MS, 1]
+        params: list[Any] = [move_ms, 1]
         for servo, angle in pairs:
             params.extend([servo, angle])
         await self.call("SetPWMServo", params)
@@ -348,8 +355,15 @@ class State:
     last_stop_fail_log: float = 0.0
     last_drive_log: float = 0.0
 
-    pan_deg: float = 0.0
-    tilt_deg: float = 0.0
+    # None until this gateway has commanded a position. Deliberately not 0.0: on a
+    # restart the servos physically hold wherever they were, and reporting 0 would be
+    # the gateway inventing a pose it has no way to know. The board CAN be asked -- the
+    # SDK has pwm_servo_read_position -- but RPCServer does not expose it, and the read
+    # is a blocking queue.get() with no timeout, so a board that never answers would
+    # wedge the single-threaded RPC server for every caller, permanently. Not a trade
+    # worth making to avoid saying "unknown".
+    pan_deg: float | None = None
+    tilt_deg: float | None = None
 
     ws_clients: int = 0
 
@@ -579,6 +593,12 @@ class LookBody(BaseModel):
     model_config = {"extra": "forbid"}
     pan_deg: Number = 0
     tilt_deg: Number = 0
+    #: How long the board should take to sweep there, milliseconds, clamped [50, 2000].
+    #: The default suits a discrete "look over there". A pad that sends a new angle as a
+    #: thumb moves wants this much shorter -- each command re-targets a sweep already in
+    #: progress, so a long duration means the servo never arrives before being told
+    #: something new, and the camera lags the thumb by the sweep time.
+    move_ms: Number = LOOK_MOVE_MS
 
 
 @contextlib.asynccontextmanager
@@ -675,6 +695,8 @@ async def telemetry() -> dict:
         "sonar_guard_mm": SONAR_STOP_MM,
         "max_duty": MAX_DUTY,
         "min_duty": MIN_DUTY,
+        "pan_deg": state.pan_deg,
+        "tilt_deg": state.tilt_deg,
         "sonar_usable": sonar_fresh() is not None,
     }
 
@@ -808,8 +830,10 @@ async def stop() -> Any:
 async def look_set(body: LookBody) -> Any:
     pan = clamp(float(body.pan_deg), -LOOK_LIMIT_DEG, LOOK_LIMIT_DEG)
     tilt = clamp(float(body.tilt_deg), -LOOK_LIMIT_DEG, LOOK_LIMIT_DEG)
+    move_ms = int(clamp(float(body.move_ms), LOOK_MOVE_MIN_MS, LOOK_MOVE_MAX_MS))
     try:
-        await rpc.set_servos([(SERVO_TILT, TILT_SIGN * tilt), (SERVO_PAN, PAN_SIGN * pan)])
+        await rpc.set_servos([(SERVO_TILT, TILT_SIGN * tilt), (SERVO_PAN, PAN_SIGN * pan)],
+                             move_ms=move_ms)
     except RobotUnreachable:
         return refusal(503, "turbopi_unreachable", "/look")
     except RobotError as exc:

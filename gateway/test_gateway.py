@@ -348,6 +348,18 @@ def main() -> int:
         status, body = request("POST", "/look", {"pan_deg": "left"})
         check("non-numeric /look -> 400", status == 400, f"got {status} {body}")
 
+        control(reset_calls=True)
+        request("POST", "/look", {"pan_deg": 10, "tilt_deg": 0, "move_ms": 80})
+        sweeps = [c["params"][0] for c in calls()["calls"] if c["method"] == "SetPWMServo"]
+        check("move_ms reaches the board, for a pad that drags", sweeps == [80], str(sweeps))
+        request("POST", "/look", {"pan_deg": 10, "move_ms": 5})
+        sweeps = [c["params"][0] for c in calls()["calls"] if c["method"] == "SetPWMServo"]
+        check("move_ms is clamped up to the 50 ms floor", sweeps[-1] == 50, str(sweeps))
+
+        status, body = request("GET", "/telemetry")
+        check("telemetry carries the pose, so a page needs no second round trip",
+              body.get("pan_deg") == 10.0 and "tilt_deg" in body, str(body))
+
         print("\n== 12. robot says no ==")
         control(fail_methods=["SetBrushMotor"])
         status, body = request("POST", "/drive", {"vx": 0.2, "ttl_ms": 500})
@@ -406,7 +418,10 @@ def main() -> int:
 
         print("\n== 16. the sonar guard ==")
         control(reset_calls=True, sonar_mm=180)          # 18 cm: inside the 25 cm guard
-        time.sleep(0.5)
+        check("the guard's reading refreshes before it goes stale",
+              wait_until(lambda: request("GET", "/telemetry")[1]["sonar_mm"] == 180, 3)
+              and request("GET", "/telemetry")[1]["sonar_usable"] is True,
+              "sonar never became both current and usable")
         status, body = request("POST", "/drive", {"vx": 0.4, "ttl_ms": 500})
         check("forward into an obstacle -> 409 obstacle",
               status == 409 and body.get("reason") == "obstacle", f"got {status} {body}")
@@ -424,13 +439,13 @@ def main() -> int:
 
         for reading, label in ((0, "0 mm (no echo)"), (99999, "99999 (I2C error)")):
             control(sonar_mm=reading)
-            time.sleep(0.5)
+            wait_until(lambda r=reading: request("GET", "/telemetry")[1]["sonar_mm"] == r, 3)
             status, _ = request("POST", "/drive", {"vx": 0.4, "ttl_ms": 500})
             check(f"{label} means unknown, not near - driving allowed", status == 200,
                   f"got {status}")
             request("POST", "/stop")
         control(sonar_mm=412)
-        time.sleep(0.5)
+        wait_until(lambda: request("GET", "/telemetry")[1]["sonar_mm"] == 412, 3)
         status, body = request("GET", "/telemetry")
         check("telemetry reports the guard threshold", body.get("sonar_guard_mm") == 250,
               str(body))
