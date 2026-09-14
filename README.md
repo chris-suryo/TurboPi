@@ -58,11 +58,17 @@ Background and how to read the results:
 
 Day-to-day:
 
+Run it as a service so it survives reboots and SSH disconnects:
+
 ```bash
-ssh pi@turbopi.local
-cd /home/pi/TurboPi
-~/turbopi-venv/bin/python TurboPi.py     # then open http://10.0.0.3:8080/
+bash ~/install_turbopi_service.sh        # once
+sudo systemctl status turbopi            # check any time
 ```
+
+Camera: `http://10.0.0.3:8080/` · Control API: `http://10.0.0.3:9030/`
+
+**The service owns the camera and serial port.** `sudo systemctl stop turbopi` before running
+demos or `bringup.py` by hand.
 
 To re-verify hardware after any change:
 ```bash
@@ -123,6 +129,7 @@ to reach the robot. Reasoning in
 | [`scripts/bringup.py`](scripts/bringup.py) | **Staged hardware bring-up** — serial, motors, servos, sensors, camera. Run on the Pi |
 | [`scripts/camera_multireader_test.sh`](scripts/camera_multireader_test.sh) | Can the camera be read from another machine, by more than one reader? Run on the **client** |
 | [`scripts/patch_optional_demos.py`](scripts/patch_optional_demos.py) | Stops a broken mediapipe from blocking the whole robot app |
+| [`scripts/install_turbopi_service.sh`](scripts/install_turbopi_service.sh) | Run the robot as a systemd service — autostart, crash restart, survives SSH |
 
 ## Two bugs that cost an evening each — both configuration, not hardware
 

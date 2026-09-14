@@ -69,6 +69,31 @@ Mentioned for completeness; VNC is better for this.
 
 ---
 
+## Run it as a service, not from an SSH session
+
+`TurboPi.py` runs in the **foreground**. Started by hand over SSH it dies when that session
+closes, when the laptop sleeps, or on any stray Ctrl-C — and the camera and control API vanish
+with it. That is a bad foundation for anything that consumes the robot over the network.
+
+```bash
+bash ~/install_turbopi_service.sh
+```
+
+Installs a systemd unit that starts on boot, restarts on crash, and survives SSH disconnects.
+Uninstall with `--uninstall`.
+
+```bash
+sudo systemctl status turbopi      # healthy?
+sudo journalctl -u turbopi -f      # live logs
+sudo systemctl restart turbopi     # after changing code
+sudo systemctl stop turbopi        # free the camera + serial port
+```
+
+> **The service owns the camera and the serial port while it runs.** To run a `Functions/`
+> demo, a `MecanumControl/` script, or `bringup.py` by hand, **stop the service first** —
+> otherwise they fail to open `/dev/video0` or `/dev/ttyAMA0`, which looks like broken
+> hardware and isn't.
+
 ## Recommended order
 
 1. **Camera present?** — `./check_hardware.py` reports `/dev/video*`.

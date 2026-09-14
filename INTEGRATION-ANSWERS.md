@@ -247,10 +247,20 @@ drive commands below ~7.0 V and log a warning is nearly free.
 Nothing autostarts on this build. After any reboot or power cycle you must SSH in and run
 `TurboPi.py` by hand, or there is no camera and no control.
 
-**This directly contradicts what you asked for**, so it needs fixing: a systemd unit that
-starts `TurboPi.py` on boot, restarts it if it crashes, and waits for the network. Say the word
-and I'll write it — it's about ten minutes and it's the difference between a robot that's
-available whenever it's powered and one that needs a laptop first.
+**Fixed.** `scripts/install_turbopi_service.sh` installs a systemd unit that starts on boot,
+waits for the network, restarts on crash, and survives SSH disconnects:
+
+```bash
+bash ~/install_turbopi_service.sh
+```
+
+This also fixes a subtler problem that bit us during setup: run from an SSH session,
+`TurboPi.py` dies when that session closes — so the camera and API disappear with no error
+anywhere, and the next thing you notice is a connection refused.
+
+One consequence to know: **the service owns the camera and the serial port.** Anything wanting
+them directly on the Pi must `sudo systemctl stop turbopi` first. This does not affect network
+consumers, which is what kona-tracker will be.
 
 ---
 
