@@ -123,6 +123,7 @@ to reach the robot. Reasoning in
 | [`docs/09-gateway.md`](docs/09-gateway.md) | **The safety gateway** — the drive API with the motor watchdog, on :9031 |
 | [`docs/10-where-we-stand.md`](docs/10-where-we-stand.md) | **Start here in the morning** — what is built, what has never driven, what is left |
 | [`docs/11-latency.md`](docs/11-latency.md) | **Input lag** — the measured transport comparison, and the plan to make driving feel direct |
+| [`docs/12-first-hardware-day.md`](docs/12-first-hardware-day.md) | **What the robot actually did** — the watchdog proof, the duty measurements, the tuning |
 | [`HANDOFF-frontend.md`](HANDOFF-frontend.md) | Paste-ready brief for building a custom UI |
 | [`INTEGRATION-ANSWERS.md`](INTEGRATION-ANSWERS.md) | Integrating the robot as a camera + drivable device in another app |
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
