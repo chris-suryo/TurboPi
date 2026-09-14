@@ -10,6 +10,11 @@
 # nobody knows where that threshold is on this robot. It matters because the drive UI's
 # "Slow" mode is 0.4, and if the real threshold is above that, Slow is a dead stick.
 #
+# Pass "fine" to sweep duty one unit at a time through a narrow band, once the coarse
+# run has told you roughly where the threshold is:
+#
+#     bash find_min_duty.sh fine 16 28
+#
 # WHEELS OFF THE GROUND. Each step spins them for about a second.
 
 set -uo pipefail
@@ -33,7 +38,17 @@ echo "Watch the wheels and note the first step where they actually TURN,"
 echo "rather than buzz or twitch."
 sleep 5
 
-for vx in 0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.50 0.60 0.80 1.00; do
+MODE=${1:-coarse}
+if [ "$MODE" = "fine" ]; then
+  LO=${2:-16}; HI=${3:-28}
+  # Ask for each whole duty value directly: vx = duty / MAX_DUTY.
+  STEPS=$(python3 -c "print(' '.join(f'{d/$MAX_DUTY:.4f}' for d in range($LO, $HI+1)))")
+  echo "Fine sweep: duty $LO to $HI, one at a time."
+else
+  STEPS="0.10 0.15 0.20 0.25 0.30 0.35 0.40 0.50 0.60 0.80 1.00"
+fi
+
+for vx in $STEPS; do
   duty=$(python3 -c "print(round($vx * $MAX_DUTY))")
   printf '\n--- vx %-5s  duty %-3s  ' "$vx" "$duty"
   body=$(curl -s "${hdr[@]}" -X POST "$GW/drive" \
@@ -52,7 +67,7 @@ echo
 echo "Battery after:"
 curl -s "$GW/health"; echo
 echo
-echo "Report the first vx where the wheels actually turned. That number sets three things:"
+echo "Report the first DUTY where the wheels actually turned. That number sets three things:"
 echo "  - the drive UI's Slow mode (currently 0.4)"
 echo "  - whether TURBOPI_MAX_DUTY should go up from $MAX_DUTY"
 echo "  - the floor below which the UI should send zero rather than a stalling hum,"
