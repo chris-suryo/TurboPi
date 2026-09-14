@@ -75,6 +75,14 @@ LOOK_MOVE_MS = 300
 # internally, so it gets its own, longer budget and is never called from a hot path.
 RPC_TIMEOUT_FAST_S = 1.0
 RPC_TIMEOUT_SLOW_S = 3.0
+# Background polls get a short leash. The robot's RPC server is single-threaded, so an
+# in-flight poll delays the next stop by however long it takes; capping it at 400 ms
+# caps that delay too. A missed poll costs nothing -- the next one is a second away.
+RPC_TIMEOUT_POLL_S = 0.4
+
+# How often the watchdog re-attempts a stop it could not deliver, and how often it says so.
+STOP_RETRY_S = 0.25
+STOP_RETRY_LOG_S = 5.0
 
 log = logging.getLogger("gateway")
 
@@ -197,7 +205,7 @@ class RobotRPC:
     # -- the specific calls we make ----------------------------------------------------
 
     async def echo(self) -> Any:
-        return await self.call("echo", ["ping"])
+        return await self.call("echo", ["ping"], timeout=RPC_TIMEOUT_POLL_S)
 
     async def set_motor_duty(self, duties: dict[int, int], *, urgent: bool = False) -> None:
         params: list[int] = []
@@ -212,13 +220,13 @@ class RobotRPC:
         # Returns raw millivolts, or None. None is normal and not an error: get_battery()
         # pops from a queue that TurboPi.py's own voltageDetection thread is also draining
         # once a second, so some reads legitimately come back empty.
-        return await self.call("GetBatteryVoltage")
+        return await self.call("GetBatteryVoltage", timeout=RPC_TIMEOUT_POLL_S)
 
     async def sonar_mm(self) -> int | None:
-        return await self.call("GetSonarDistance")
+        return await self.call("GetSonarDistance", timeout=RPC_TIMEOUT_POLL_S)
 
     async def running_func(self) -> Any:
-        return await self.call("GetRunningFunc", timeout=RPC_TIMEOUT_SLOW_S)
+        return await self.call("GetRunningFunc", timeout=RPC_TIMEOUT_POLL_S)
 
     async def stop_func(self) -> Any:
         return await self.call("StopFunc", urgent=True, timeout=RPC_TIMEOUT_SLOW_S)
@@ -302,7 +310,10 @@ class State:
     # Drive / watchdog
     last_drive_at: float | None = None
     ttl_s: float = 0.5
-    motors_live: bool = False         # we have commanded non-zero duty and not stopped
+    motors_live: bool = False    # an unexpired drive command is in effect
+    stop_owed: bool = False      # the board may be holding non-zero duty, unconfirmed
+    last_stop_try: float = 0.0
+    last_stop_fail_log: float = 0.0
     last_drive_log: float = 0.0
 
     pan_deg: float = 0.0
@@ -352,23 +363,44 @@ async def watchdog_task() -> None:
     Not request-scoped, not a timer armed by the client, not a cancellation callback --
     a loop that runs regardless of what the rest of the process is doing. If the last
     /drive is older than the TTL it carried, the motors go to zero.
+
+    Two separate facts are tracked, and conflating them is a bug we already made once:
+
+      motors_live  an unexpired drive command is in effect       -> when to fire
+      stop_owed    the board may be holding non-zero duty and    -> when to keep trying
+                   we have not had a zero acknowledged
+
+    A stop that could not be delivered does not clear stop_owed, so the watchdog keeps
+    re-attempting it. That is what covers the case where TurboPi.py itself dies while the
+    wheels are turning: every route to the motors runs through port 9030, so nothing can
+    stop them while it is down -- but systemd restarts it, and the moment it answers
+    again the pending stop lands. Without the retry the robot would simply keep going.
     """
     while True:
         await asyncio.sleep(WATCHDOG_TICK_S)
-        if not state.motors_live or state.last_drive_at is None:
+        now = time.monotonic()
+
+        if state.motors_live and state.last_drive_at is not None:
+            age = now - state.last_drive_at
+            if age > state.ttl_s:
+                state.motors_live = False
+                log.warning("WATCHDOG FIRED - no /drive for %.0f ms (ttl %.0f ms), "
+                            "stopping motors", age * 1000, state.ttl_s * 1000)
+
+        if not state.stop_owed or state.motors_live:
             continue
-        age = time.monotonic() - state.last_drive_at
-        if age <= state.ttl_s:
+        if (now - state.last_stop_try) < STOP_RETRY_S:
             continue
-        state.motors_live = False
-        log.warning("WATCHDOG FIRED - no /drive for %.0f ms (ttl %.0f ms), stopping motors",
-                    age * 1000, state.ttl_s * 1000)
+        state.last_stop_try = now
         try:
             await rpc.stop_motors()
-        except RobotUnreachable as exc:
-            log.error("WATCHDOG could not reach robot to stop: %s", exc)
-        except RobotError as exc:
-            log.error("WATCHDOG stop refused by robot: %s", exc)
+            state.stop_owed = False
+            log.info("motors confirmed stopped")
+        except (RobotUnreachable, RobotError) as exc:
+            if (now - state.last_stop_fail_log) >= STOP_RETRY_LOG_S:
+                state.last_stop_fail_log = now
+                log.error("STOP NOT DELIVERED - %s. The board may still be driving; "
+                          "retrying every %.0f ms until it answers.", exc, STOP_RETRY_S * 1000)
 
 
 async def liveness_task() -> None:
@@ -486,11 +518,16 @@ async def lifespan(app: FastAPI):
 
     # Contract: send /stop once on start. A gateway restart after a crash is exactly when
     # the motors might still be spinning from the previous process.
+    # A gateway restart after a crash is exactly when the motors might still be spinning
+    # from the previous process, so the stop is owed until the robot acknowledges it.
+    state.stop_owed = True
     try:
         await rpc.stop_motors()
+        state.stop_owed = False
         log.info("startup stop sent")
     except (RobotUnreachable, RobotError) as exc:
-        log.warning("startup stop could not be delivered: %s", exc)
+        log.warning("startup stop could not be delivered (%s) - will retry until it lands",
+                    exc)
 
     tasks = [asyncio.create_task(coro()) for coro in
              (watchdog_task, liveness_task, demo_probe_task, battery_poll_task)]
@@ -558,6 +595,7 @@ async def telemetry() -> dict:
         "battery_age_ms": (None if state.battery_v is None
                            else int((time.monotonic() - state.battery_at) * 1000)),
         "demo_detection": state.demo_probe_ok,
+        "stop_owed": state.stop_owed,
     }
 
 
@@ -579,6 +617,7 @@ async def drive(body: DriveBody) -> Any:
         state.motors_live = False
         with contextlib.suppress(RobotUnreachable, RobotError):
             await rpc.stop_motors()
+            state.stop_owed = False
         return refusal(503, "turbopi_unreachable")
 
     battery = battery_fresh()
@@ -586,6 +625,7 @@ async def drive(body: DriveBody) -> Any:
         state.motors_live = False
         with contextlib.suppress(RobotUnreachable, RobotError):
             await rpc.stop_motors()
+            state.stop_owed = False
         return refusal(409, "low_battery")
 
     if state.demo_probe_ok and state.demo:
@@ -608,7 +648,10 @@ async def drive(body: DriveBody) -> Any:
 
     state.last_drive_at = time.monotonic()
     state.ttl_s = ttl_ms / 1000.0
-    state.motors_live = any(duty != 0 for duty in duties.values())
+    moving = any(duty != 0 for duty in duties.values())
+    state.motors_live = moving
+    # An acknowledged all-zero is the only thing that clears the debt.
+    state.stop_owed = moving
 
     now = time.monotonic()
     if (now - state.last_drive_log) >= DRIVE_LOG_INTERVAL_S:
@@ -633,6 +676,7 @@ async def stop() -> Any:
     log.info("STOP requested")
     try:
         await rpc.stop_motors()
+        state.stop_owed = False
     except RobotUnreachable as exc:
         log.error("STOP COULD NOT BE DELIVERED - robot unreachable: %s", exc)
         return JSONResponse(status_code=503,

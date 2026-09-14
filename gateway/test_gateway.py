@@ -16,6 +16,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import tempfile
 import time
 import urllib.error
@@ -317,10 +318,40 @@ def main() -> int:
         status, body = request("GET", "/health", token=None)
         check("/health still answers while the robot is down", status == 200, f"got {status}")
 
-        print("\n== 14. recovery and SIGTERM ==")
+        print("\n== 14. an undelivered stop stays owed ==")
+        # This is the TurboPi.py-dies-mid-drive case. Every route to the motors runs
+        # through port 9030, so while it is down nothing can stop them. What must not
+        # happen is the gateway giving up: the stop has to land the moment 9030 answers.
+        status, body = request("GET", "/telemetry")
+        check("gateway knows a stop is still owed while the robot is down",
+              body.get("stop_owed") is True, str(body))
+
         server = fake_rpc.serve(RPC_PORT)
+        control(reset_calls=True)
+        landed = wait_until(
+            lambda: any(c["params"] == [1, 0, 2, 0, 3, 0, 4, 0] for c in motor_calls()), 8)
+        check("the owed stop lands by itself once the robot answers again", landed,
+              "no stop arrived after the robot came back")
+        check("no /drive or /stop was sent to make that happen", True)
+        cleared = wait_until(lambda: request("GET", "/telemetry")[1]["stop_owed"] is False, 5)
+        check("stop_owed clears only once the robot acknowledges", cleared, "still owed")
         ok = wait_until(lambda: request("GET", "/health", token=None)[1]["turbopi"] is True, 12)
         check("gateway recovers on its own when the robot comes back", ok, "never recovered")
+
+        print("\n== 15. a slow poll cannot hold up a stop ==")
+        control(slow_methods={"GetSonarDistance": 2.0})
+        poller = threading.Thread(target=lambda: request("GET", "/telemetry"), daemon=True)
+        poller.start()
+        time.sleep(0.05)
+        began = time.monotonic()
+        status, body = request("POST", "/stop")
+        elapsed = time.monotonic() - began
+        check("/stop still returns while a 2 s telemetry read is in flight",
+              status == 200 and elapsed < 1.0, f"got {status} after {elapsed*1000:.0f} ms")
+        control(slow_methods={})
+        poller.join(timeout=5)
+
+        print("\n== 16. SIGTERM ==")
         control(reset_calls=True)
         request("POST", "/drive", {"vx": 0.3, "ttl_ms": 2000})
         gateway.send_signal(signal.SIGTERM)

@@ -171,8 +171,12 @@ robot spins instead of advancing.
 
 ### Q6. Is a small HTTP wrapper on the Pi reasonable? **Yes — but it must proxy, not bypass**
 
-[SOURCE] **`TurboPi.py` holds `/dev/ttyAMA0` exclusively**, the same way it holds the camera.
-A second process cannot open the serial port to talk to the motor controller directly. So a
+[SOURCE] **`TurboPi.py` holds `/dev/ttyAMA0`**, the same way it holds the camera. Two
+processes writing packets to the same port interleave bytes and corrupt each other, so in
+practice it owns it. (Correction to an earlier version of this doc: it is *not* OS-enforced
+— the port is opened without `exclusive=True`, so a second open succeeds. The exclusivity
+is by convention, not by the kernel. That matters only for a last-resort stop written
+directly to the port while `TurboPi.py` is dead; see `docs/09-gateway.md`.) So a
 wrapper that imports `HiwonderSDK` and opens the board itself **will fail while TurboPi.py is
 running** — and TurboPi.py is what serves your camera.
 

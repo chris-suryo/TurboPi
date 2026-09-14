@@ -17,7 +17,7 @@ robot**, on the near side of every link that can fail.
 | Auth | `X-Robot-Token: <secret>` on every endpoint except `/health` |
 | Secret | `/etc/turbopi/gateway-token`, mode 0600, owned by `pi` |
 | Source | [`gateway/robot_gateway.py`](../gateway/robot_gateway.py) |
-| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 62 checks, no robot needed |
+| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 67 checks, no robot needed |
 
 ## Install
 
@@ -64,9 +64,10 @@ it exposes only liveness, battery voltage and uptime.
 RPC answers are cached for 500 ms, so two viewers polling at 1 Hz do not double the load
 on the robot's single-threaded RPC server.
 
-Two keys beyond the contract, both additive and safe to ignore: `battery_age_ms` (how
-stale the voltage is — see "Battery readings are intermittent") and `demo_detection`
-(whether the `demo_running` guard is actually active).
+Three keys beyond the contract, all additive and safe to ignore: `battery_age_ms` (how
+stale the voltage is — see "Battery readings are intermittent"), `demo_detection` (whether
+the `demo_running` guard is actually active), and `stop_owed` (the gateway believes the
+board may still be driving and has not managed to stop it — see "The stop is owed").
 
 `last_command_age_ms` is **`null` before the first `/drive`**, not `0` — zero would mean
 "a command just arrived", which is the opposite of the truth.
@@ -89,6 +90,24 @@ refused with **400** and nothing is forwarded.
 | `409 {"ok": false, "reason": "demo_running"}` | A built-in demo is driving |
 | `502 {"ok": false, "reason": "E03 - ..."}` | The robot answered and said no |
 | `503 {"ok": false, "reason": "turbopi_unreachable"}` | Port 9030 silent — treated as a stop |
+
+**Out-of-range is clamped, not refused.** `{"vx": 5, "omega": -9, "ttl_ms": 99999}` returns
+`200` having driven at `vx=1, omega=-1, ttl=2000`. Only *non-numeric* input gets a 400.
+
+Exact bodies, captured from a running gateway rather than written from memory:
+
+```
+401  {"ok":false,"reason":"unauthorized"}
+400  {"ok":false,"reason":"invalid_body","detail":[{"type":"float_type",
+      "loc":["body","vx","float"],"msg":"Input should be a valid number","input":"fast"}, ...]}
+409  {"ok":false,"reason":"low_battery"}
+409  {"ok":false,"reason":"demo_running"}
+503  {"ok":false,"reason":"turbopi_unreachable"}
+200  {"ok":true,"battery_v":7.968}
+```
+
+`detail` is pydantic's own error list, truncated to four entries. Match on `reason`, not on
+`detail`.
 
 The client never sends motor ids. The gateway owns the kinematics and the wiring
 inversion.
@@ -130,8 +149,49 @@ Layers, outermost first:
    crash or a `SIGKILL`, when no Python of ours gets to run at all.
 4. **A stop on startup** — covers the case where the previous process died mid-drive.
 
-What none of them cover: the gateway's host losing power while the expansion board keeps
-its own. On this robot both are fed from the same battery, so that case does not arise.
+### The stop is owed until the robot acknowledges it
+
+Every one of those four layers reaches the motors through port 9030. **If `TurboPi.py`
+itself dies while the wheels are turning, none of them can do anything** — there is no
+other route to the board while it is down.
+
+So the gateway tracks two separate facts, and keeps them separate:
+
+| | |
+|---|---|
+| `motors_live` | an unexpired drive command is in effect → decides *when to fire* |
+| `stop_owed` | the board may be holding non-zero duty, unacknowledged → decides *when to keep trying* |
+
+A stop that could not be delivered **does not clear `stop_owed`**. The watchdog re-attempts
+it every 250 ms (logging at most every 5 s) until the robot answers. `turbopi.service` has
+`Restart=always`, so `TurboPi.py` comes back within seconds — and the pending stop lands on
+the first attempt after it does.
+
+That bounds a runaway to however long `TurboPi.py` takes to restart, instead of forever.
+It does not eliminate it. `stop_owed` is exposed in `/telemetry` so a client can show it.
+
+**Nothing zeroes the motors when `TurboPi.py` starts.** `set_motor_duty` appears in exactly
+one place in the vendor source — the `SetBrushMotor` RPC handler — so a restart does not by
+itself change what the board is doing. The gateway's pending stop is the only thing that
+does.
+
+**The remaining gap, and how it could be closed.** The board's serial port is *not* opened
+with `exclusive=True` (`ros_robot_controller_sdk.py` line 105), so it is only held by
+convention, not by the kernel. While `TurboPi.py` is dead the port is genuinely free, and a
+stop could be written to it directly:
+
+```
+AA 55 03 <len> 05 04  00 00000000  01 00000000  02 00000000  03 00000000  <crc8>
+```
+
+— `set_motor_duty` sub-command `0x05`, four motors, each `<Bf` of (index, 0.0). Building
+that fallback is the real fix for this failure mode. It is **not built**, deliberately:
+writing to a port another process may hold is only safe behind a check that nothing does,
+and none of it can be tested without the robot. Worth doing after the first hardware
+session, not before.
+
+What nothing covers: the Pi losing power while the expansion board keeps its own. Both are
+fed from the same battery here, so that case does not arise.
 
 ## Two vendor bugs this works around
 
@@ -196,7 +256,7 @@ on the LAN.
 cd gateway && python3 test_gateway.py
 ```
 
-62 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
+67 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
 the 3-element envelope and the 2-element failure variant, `echo` returning no envelope at
 all, the broken `GetRunningFunc`, the 2-second `StopFunc`, millivolt battery readings.
 

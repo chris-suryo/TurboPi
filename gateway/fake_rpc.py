@@ -41,6 +41,7 @@ class Robot:
         self.demo: int = 0
         self.getrunningfunc_patched = False   # default: the vendor bug
         self.fail_methods: list[str] = []     # force these to return an envelope failure
+        self.slow_methods: dict = {}          # method -> seconds to stall before answering
         self.duties: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0}
         self.servo_pulses: dict[int, int] = {}
         self.calls: list[dict] = []
@@ -59,6 +60,9 @@ def vendor_map(x, in_min, in_max, out_min, out_max):
 
 def handle(method: str, params: list):
     robot.record(method, params)
+
+    if method in robot.slow_methods:
+        time.sleep(float(robot.slow_methods[method]))
 
     if method in robot.fail_methods:
         return [False, "E03 - Operation failed!", method]
