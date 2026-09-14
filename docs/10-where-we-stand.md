@@ -18,9 +18,9 @@ and nothing has driven.** Every remaining task needs hands on the robot.
 
 Each of these needs the robot powered on and in front of you.
 
-1. **Install the gateway** — `bash install_gateway.sh`, then
-   `python3 patch_getrunningfunc.py && sudo systemctl restart turbopi turbopi-gateway`.
-   The patch is required, not optional.
+1. **Install the gateway** — copy `gateway/` to the Pi and run `bash
+   install_gateway.sh` from inside it. One command; it applies the required
+   `GetRunningFunc` patch itself.
 2. **Watchdog proof on a stand** — `bash gateway_watchdog_proof.sh`. This is the gate.
    If it fails, stop; everything after it assumes it passed.
 3. **Network** — `Test-NetConnection 10.0.0.3 -Port 9031` and `-Port 8080` from the PC,

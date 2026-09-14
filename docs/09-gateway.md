@@ -21,21 +21,17 @@ robot**, on the near side of every link that can fail.
 
 ## Install
 
-On the Pi, having copied the `gateway/` directory over:
+Everything the installer needs lives in `gateway/`, so this is the whole procedure:
 
 ```bash
-bash install_gateway.sh
+scp -r gateway pi@10.0.0.3:~/turbopi-gateway     # PowerShell or Terminal, on your PC
+ssh pi@10.0.0.3
+cd ~/turbopi-gateway && bash install_gateway.sh  # SSH, on the Pi
 ```
 
-It prints the shared secret at the end. That value goes in kona-tracker's `.env`.
-
-Then, to enable the `demo_running` guard (see "The GetRunningFunc bug" below):
-
-```bash
-python3 patch_getrunningfunc.py
-sudo systemctl restart turbopi
-sudo systemctl restart turbopi-gateway
-```
+It installs the service, applies the required `GetRunningFunc` patch, restarts
+`TurboPi.py` so the patch takes effect, and prints the shared secret at the end. That
+value goes in kona-tracker's `.env`.
 
 ## The API
 
@@ -270,7 +266,7 @@ def GetRunningFunc():
 `runbymainth` begins `if callable(req)`. A string is not callable, so this returns
 `E05 - Not callable` **every time**. There is no path where it succeeds.
 `Functions/Running.py` already contains `getLoadedFunc`, which is what it was reaching
-for. [`scripts/patch_getrunningfunc.py`](../scripts/patch_getrunningfunc.py) changes the
+for. [`gateway/patch_getrunningfunc.py`](../gateway/patch_getrunningfunc.py) changes the
 one line.
 
 Until it is applied, the gateway cannot see demo state. It says so — in its log at

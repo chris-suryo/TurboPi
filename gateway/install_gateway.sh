@@ -2,9 +2,13 @@
 #
 # Install the TurboPi safety gateway as a systemd service.
 #
-# Run this ON THE PI, from the directory that contains robot_gateway.py:
+# Copy the whole gateway/ directory to the Pi and run this from inside it. Everything
+# the installer needs is in that one directory -- that is deliberate, so there is no
+# "and also fetch this other file from somewhere else" step:
 #
-#     bash install_gateway.sh
+#     scp -r gateway pi@10.0.0.3:~/turbopi-gateway      # from your PC
+#     ssh pi@10.0.0.3
+#     cd ~/turbopi-gateway && bash install_gateway.sh
 #
 # What it installs, so you can keep your list accurate:
 #   /home/pi/gateway-venv/           a venv holding fastapi, uvicorn, httpx, pydantic
@@ -28,7 +32,8 @@ step() { echo; echo "==> $*"; }
 
 [ "$(id -un)" = "pi" ] || fail "run this as the pi user (the service runs as pi)"
 
-for f in robot_gateway.py turbopi-gateway.service turbopi-stop-motors.sh requirements.txt; do
+for f in robot_gateway.py turbopi-gateway.service turbopi-stop-motors.sh requirements.txt \
+         patch_getrunningfunc.py; do
   [ -f "$SRC_DIR/$f" ] || fail "missing $f next to this script -- copy the whole gateway/ directory over"
 done
 
@@ -70,6 +75,18 @@ else
 fi
 sudo chown pi:pi "$TOKEN_FILE"
 sudo chmod 0600 "$TOKEN_FILE"
+
+step "Patching the robot's GetRunningFunc"
+# Not optional: unpatched, it fails with E05 every time and the gateway cannot tell
+# whether a built-in demo is driving, so the demo_running guard stays off. Doing it here
+# means one fewer command to remember, and the gateway restart below picks it up.
+if python3 "$SRC_DIR/patch_getrunningfunc.py"; then
+  echo "    restarting TurboPi.py so it takes effect"
+  sudo systemctl restart turbopi || echo "    WARNING: could not restart turbopi"
+else
+  echo "    WARNING: the patch did not apply. The gateway will run, but the"
+  echo "    'do not drive while a demo is running' guard will be OFF and will say so."
+fi
 
 step "Installing the systemd unit"
 sudo install -m 0644 "$SRC_DIR/turbopi-gateway.service" "$UNIT"

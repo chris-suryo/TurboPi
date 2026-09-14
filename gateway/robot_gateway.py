@@ -453,7 +453,7 @@ async def demo_probe_task() -> None:
 
     Vendor bug: RPCServer.GetRunningFunc calls runbymainth("GetRunningFunc", ...) with a
     string where a callable is required, so it always fails with "E05 - Not callable".
-    scripts/patch_getrunningfunc.py points it at Running.getLoadedFunc instead. Without
+    patch_getrunningfunc.py points it at Running.getLoadedFunc instead. Without
     that patch we cannot see demo state, and the demo_running guard cannot be enforced --
     which we say out loud rather than pretending the guard is active.
     """
@@ -473,7 +473,7 @@ async def demo_probe_task() -> None:
                 state.demo_probe_logged = True
                 log.warning(
                     "GetRunningFunc unusable (%s) - demo detection OFF. The 409 demo_running "
-                    "guard cannot be enforced until scripts/patch_getrunningfunc.py is applied "
+                    "guard cannot be enforced until patch_getrunningfunc.py is applied "
                     "and TurboPi.py restarted.", exc)
         except RobotUnreachable:
             pass

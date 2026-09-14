@@ -121,6 +121,8 @@ to reach the robot. Reasoning in
 | [`docs/07-build-from-clean-os.md`](docs/07-build-from-clean-os.md) | **The build runbook** — the primary path, no vendor image needed |
 | [`docs/08-robot-api.md`](docs/08-robot-api.md) | **Network API** — MJPEG on :8080, JSON-RPC on :9030 |
 | [`docs/09-gateway.md`](docs/09-gateway.md) | **The safety gateway** — the drive API with the motor watchdog, on :9031 |
+| [`docs/10-where-we-stand.md`](docs/10-where-we-stand.md) | **Start here in the morning** — what is built, what has never driven, what is left |
+| [`docs/11-latency.md`](docs/11-latency.md) | **Input lag** — the measured transport comparison, and the plan to make driving feel direct |
 | [`HANDOFF-frontend.md`](HANDOFF-frontend.md) | Paste-ready brief for building a custom UI |
 | [`INTEGRATION-ANSWERS.md`](INTEGRATION-ANSWERS.md) | Integrating the robot as a camera + drivable device in another app |
 | [`docs/image-request-email.md`](docs/image-request-email.md) | The email to send Hiwonder for the Pi 5 image |
