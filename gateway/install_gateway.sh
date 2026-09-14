@@ -48,6 +48,12 @@ else
 fi
 
 step "Creating the venv at $VENV"
+# Checked separately so the remedy is one obvious line rather than buried in ensurepip's
+# traceback. Raspberry Pi OS usually ships python3-venv, but a minimal image may not.
+if ! python3 -c "import venv, ensurepip" 2>/dev/null; then
+  fail "python3-venv is missing. Run this, then re-run the installer:
+        sudo apt update && sudo apt install -y python3-venv"
+fi
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv "$VENV"
 else
