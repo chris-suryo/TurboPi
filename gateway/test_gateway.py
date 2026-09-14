@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 
 import fake_rpc
+import importlib.util
 from websockets.sync.client import connect as ws_connect
 from websockets.exceptions import InvalidStatus
 
@@ -112,6 +113,56 @@ def main() -> int:
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     try:
+        print("\n== 0. kinematics with a static-friction floor ==")
+        # Pure function, so tested directly. Measured on the real robot: the left pair
+        # break away around duty 16 and the right pair need low twenties, so below the
+        # worst of them a "drive forward" turns two wheels and stalls two -- veering,
+        # not slow driving. The floor lifts the whole command above that.
+        def kinematics(minimum, maximum):
+            os.environ["TURBOPI_MIN_DUTY"] = str(minimum)
+            os.environ["TURBOPI_MAX_DUTY"] = str(maximum)
+            sys.modules.pop("robot_gateway", None)
+            spec = importlib.util.spec_from_file_location("robot_gateway", "robot_gateway.py")
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules["robot_gateway"] = mod
+            spec.loader.exec_module(mod)
+            return mod.wheel_duties
+
+        plain = kinematics(0, 35)
+        check("a floor of 0 leaves the old behaviour untouched",
+              plain(1, 0, 0) == {1: -35, 2: 35, 3: -35, 4: 35}
+              and plain(0.5, 0, 0) == {1: -18, 2: 18, 3: -18, 4: 18}
+              and plain(1, 1, 0) == {1: 0, 2: 35, 3: -35, 4: 0}, str(plain(1, 0, 0)))
+
+        lifted = kinematics(24, 70)
+        check("zero input still means zero, floor or no floor",
+              lifted(0, 0, 0) == {1: 0, 2: 0, 3: 0, 4: 0}, str(lifted(0, 0, 0)))
+        check("the smallest real input asks for the floor, not a stalling hum",
+              max(abs(v) for v in lifted(0.01, 0, 0).values()) == 24,
+              str(lifted(0.01, 0, 0)))
+        check("full stick still reaches the ceiling",
+              max(abs(v) for v in lifted(1, 0, 0).values()) == 70, str(lifted(1, 0, 0)))
+        check("the range in between is monotonic",
+              [max(abs(v) for v in lifted(x, 0, 0).values())
+               for x in (0.01, 0.25, 0.5, 0.75, 1.0)] == [24, 36, 47, 58, 70],
+              str([max(abs(v) for v in lifted(x, 0, 0).values())
+                   for x in (0.01, 0.25, 0.5, 0.75, 1.0)]))
+
+        # The one that matters: a mecanum chassis travels in the direction set by the
+        # RATIOS between the four wheels. Lifting each motor to its own floor would bend
+        # the path; lifting the magnitude and scaling all four together cannot.
+        for name, args in (("diagonal", (1, 1, 0)), ("arc", (1, 0, 0.5)),
+                           ("strafe and spin", (0, 0.6, 0.3)), ("reverse arc", (-0.8, 0, -0.4))):
+            raw, lift = kinematics(0, 70)(*args), lifted(*args)
+            rp = max(abs(v) for v in raw.values()) or 1
+            lp = max(abs(v) for v in lift.values()) or 1
+            same = all(abs(a / rp - b / lp) < 0.03
+                       for a, b in zip(raw.values(), lift.values()))
+            check(f"the floor does not bend the path: {name}", same, f"{raw} vs {lift}")
+
+        os.environ.pop("TURBOPI_MIN_DUTY", None)
+        os.environ.pop("TURBOPI_MAX_DUTY", None)
+
         ready = wait_until(lambda: request("GET", "/health", token=None)[1]["turbopi"] is True, 15)
         if not ready:
             print("gateway never became ready")

@@ -94,6 +94,38 @@ else
   echo "    'do not drive while a demo is running' guard will be OFF and will say so."
 fi
 
+step "Tuning file"
+if sudo test -f /etc/turbopi/gateway.env; then
+  echo "    /etc/turbopi/gateway.env already exists -- leaving your settings alone"
+else
+  sudo tee /etc/turbopi/gateway.env >/dev/null <<'TUNING'
+# TurboPi gateway tuning. Edit, then: sudo systemctl restart turbopi-gateway
+# Current values are visible any time in /telemetry.
+
+# Duty at full stick. Hiwonder's own scale is 0-100 and their demos drive at 40-45,
+# so 35 is conservative. Raise it once you know the robot behaves.
+#TURBOPI_MAX_DUTY=35
+
+# Duty below which the motors hum instead of turning. Measure it with
+# find_min_duty.sh and set it to the value where ALL FOUR wheels turn -- below the
+# worst motor's threshold, "forward" turns some wheels and stalls others, which is
+# veering rather than slow driving. 0 disables the floor.
+#TURBOPI_MIN_DUTY=0
+
+# Refuse forward motion closer than this, in millimetres. 0 disables the guard.
+#TURBOPI_SONAR_STOP_MM=250
+
+# Refuse to drive below this battery voltage.
+#TURBOPI_LOW_BATTERY_V=7.0
+
+# Flip either if pan or tilt comes out mirrored.
+#TURBOPI_PAN_SIGN=-1
+#TURBOPI_TILT_SIGN=-1
+TUNING
+  sudo chown pi:pi /etc/turbopi/gateway.env
+  echo "    created /etc/turbopi/gateway.env (all values commented out = defaults)"
+fi
+
 step "Installing the systemd unit"
 sudo install -m 0644 "$SRC_DIR/turbopi-gateway.service" "$UNIT"
 sudo systemctl daemon-reload

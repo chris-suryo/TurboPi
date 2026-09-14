@@ -13,6 +13,9 @@ User=pi
 Group=pi
 WorkingDirectory=/home/pi
 Environment=TURBOPI_GATEWAY_TOKEN_FILE=/etc/turbopi/gateway-token
+# Tuning lives here so it survives reinstalls and needs no systemd surgery. The leading
+# dash means the service still starts if the file is absent.
+EnvironmentFile=-/etc/turbopi/gateway.env
 Environment=TURBOPI_RPC_URL=http://127.0.0.1:9030/
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/pi/gateway-venv/bin/python /home/pi/robot_gateway.py

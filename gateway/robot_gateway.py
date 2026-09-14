@@ -50,6 +50,16 @@ PORT = int(os.environ.get("TURBOPI_GATEWAY_PORT", "9031"))
 # floor is usually a table. Raise it once you trust the control loop.
 MAX_DUTY = int(os.environ.get("TURBOPI_MAX_DUTY", "35"))
 
+# The duty below which the motors hum instead of turning. Measured, not guessed: every
+# geared motor has a static-friction threshold, and on this robot the four are not equal
+# -- the left pair break away well before the right. Below the worst of them, a "drive
+# forward" turns two wheels and stalls two, which is not slow driving, it is veering.
+#
+# Set this to the duty at which ALL FOUR turn and the whole stick becomes usable: the
+# smallest input asks for the slowest speed the robot can actually do, instead of asking
+# for a speed it cannot do and sitting there buzzing. 0 disables the floor.
+MIN_DUTY = int(os.environ.get("TURBOPI_MIN_DUTY", "0"))
+
 LOW_BATTERY_V = float(os.environ.get("TURBOPI_LOW_BATTERY_V", "7.0"))
 
 TTL_MIN_MS, TTL_MAX_MS = 100, 2000
@@ -253,7 +263,8 @@ class RobotRPC:
 # Mecanum kinematics
 # --------------------------------------------------------------------------------------
 
-def wheel_duties(vx: float, vy: float, omega: float, max_duty: int = MAX_DUTY) -> dict[int, int]:
+def wheel_duties(vx: float, vy: float, omega: float, max_duty: int = MAX_DUTY,
+                 min_duty: int = MIN_DUTY) -> dict[int, int]:
     """
     Body velocity -> the four motor duties, wiring inversion included.
 
@@ -280,14 +291,26 @@ def wheel_duties(vx: float, vy: float, omega: float, max_duty: int = MAX_DUTY) -
     # Normalise rather than clip: clipping a saturated combination changes the direction
     # the robot actually travels, which is worse than travelling slower.
     peak = max(abs(w1), abs(w2), abs(w3), abs(w4))
+    if peak == 0.0:
+        return {1: 0, 2: 0, 3: 0, 4: 0}
     if peak > 1.0:
         w1, w2, w3, w4 = w1 / peak, w2 / peak, w3 / peak, w4 / peak
+        peak = 1.0
+
+    # Lift the whole command above the static-friction floor, if one is configured.
+    #
+    # The lift is applied to the *magnitude* and every wheel is scaled by the same factor,
+    # so the ratios between the four -- which are what set the direction a mecanum chassis
+    # travels in -- come through untouched. Give each motor its own floor instead and you
+    # bend the robot's path at low speed, trading a stall for a drift.
+    span = max_duty * peak if min_duty <= 0 else min_duty + (max_duty - min_duty) * peak
+    factor = span / peak
 
     return {
-        1: int(round(-w1 * max_duty)),
-        2: int(round(w2 * max_duty)),
-        3: int(round(-w3 * max_duty)),
-        4: int(round(w4 * max_duty)),
+        1: int(round(-w1 * factor)),
+        2: int(round(w2 * factor)),
+        3: int(round(-w3 * factor)),
+        4: int(round(w4 * factor)),
     }
 
 
@@ -584,8 +607,8 @@ async def lifespan(app: FastAPI):
     tasks = [asyncio.create_task(coro()) for coro in
              (watchdog_task, liveness_task, demo_probe_task, battery_poll_task,
               sonar_poll_task)]
-    log.info("gateway listening on %s:%d -> %s (max duty %d, low battery %.1f V)",
-             HOST, PORT, RPC_URL, MAX_DUTY, LOW_BATTERY_V)
+    log.info("gateway listening on %s:%d -> %s (duty %d..%d, low battery %.1f V)",
+             HOST, PORT, RPC_URL, MIN_DUTY, MAX_DUTY, LOW_BATTERY_V)
     try:
         yield
     finally:
@@ -650,6 +673,8 @@ async def telemetry() -> dict:
         "demo_detection": state.demo_probe_ok,
         "stop_owed": state.stop_owed,
         "sonar_guard_mm": SONAR_STOP_MM,
+        "max_duty": MAX_DUTY,
+        "min_duty": MIN_DUTY,
         "sonar_usable": sonar_fresh() is not None,
     }
 
