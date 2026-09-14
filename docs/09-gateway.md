@@ -17,7 +17,7 @@ robot**, on the near side of every link that can fail.
 | Auth | `X-Robot-Token: <secret>` on every endpoint except `/health` |
 | Secret | `/etc/turbopi/gateway-token`, mode 0600, owned by `pi` |
 | Source | [`gateway/robot_gateway.py`](../gateway/robot_gateway.py) |
-| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 67 checks, no robot needed |
+| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 86 checks, no robot needed |
 
 ## Install
 
@@ -125,6 +125,40 @@ seconds. The robot's RPC server handles one request at a time, so an unnecessary
 `StopFunc` would block the *next* stop for two seconds. A safety stop that can be delayed
 two seconds by a previous safety stop is not a safety stop.
 
+### `GET /ws/drive` — WebSocket, the low-latency path
+
+Same safety rules, without a request per command. Use this in preference to `POST /drive`
+for anything holding a stick down; see [`docs/11-latency.md`](11-latency.md) for the
+measurements that justify it. Auth is the same `X-Robot-Token` header, checked **before**
+the handshake is accepted, so a bad token fails to connect rather than opening a socket
+nobody trusts.
+
+Client → server, as often as it likes:
+
+```json
+{"vx": 0.4, "vy": 0, "omega": -0.2, "seq": 41}
+{"stop": true}
+```
+
+Server → client:
+
+```json
+{"type":"ack","seq":41,"ok":true,"battery_v":7.97}
+{"type":"ack","seq":42,"ok":false,"reason":"obstacle","sonar_mm":180}
+{"type":"error","reason":"invalid_body"}
+{"type":"telemetry","battery_v":7.97,"sonar_mm":412, ...}
+```
+
+`seq` is echoed untouched so a client can measure its own round trip and display it.
+Telemetry arrives on the same socket once a second, so a driving client needs no second
+connection and no polling.
+
+A malformed frame gets an `error` and the socket stays open — turning one bad frame into a
+dropped control link would be worse than ignoring it.
+
+**Closing the socket stops the robot immediately**, without waiting out the TTL. A closed
+socket is a released stick, and TCP says so within milliseconds on a LAN.
+
 ### `POST /look` and `GET /look`
 
 ```json
@@ -133,6 +167,35 @@ two seconds by a previous safety stop is not a safety stop.
 
 Clamped to ±45° server-side. `GET` returns the last **clamped** values, not what was
 asked for.
+
+## The sonar guard
+
+Forward motion is refused when the ultrasonic sensor reads closer than
+`TURBOPI_SONAR_STOP_MM` (default **250 mm**; set `0` to disable). The refusal is a `409`
+carrying the distance:
+
+```json
+{"ok": false, "reason": "obstacle", "sonar_mm": 180}
+```
+
+Three decisions worth knowing:
+
+**Only forward is blocked.** Reversing, strafing and rotating are how you get out of a
+corner; blocking them would strand the robot against a wall with no way back.
+
+**An unknown distance does not block.** The vendor's `getDistance()` returns `99999` when
+the I2C read throws, and `0` when no echo comes back — which on an ultrasonic sensor
+usually means *nothing is in range*, the opposite of near. Treating either as an obstacle
+would make the robot undrivable the moment the sensor hiccuped. Both are treated as "no
+reading", and `/telemetry` exposes `sonar_usable` so a client can say so.
+
+**It polls harder while driving** (5 Hz) than idle (1 Hz), because a guard acting on a
+one-second-old distance is not a guard — but the robot's RPC server takes one request at a
+time, so polling that hard when nothing is moving would compete with the commands that
+matter.
+
+**Never tested against the real sensor.** The thresholds are guesses. Check what the sonar
+actually reads at 25 cm before trusting this, and set it to `0` if it misbehaves.
 
 ## The watchdog
 
@@ -256,7 +319,7 @@ on the LAN.
 cd gateway && python3 test_gateway.py
 ```
 
-67 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
+86 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
 the 3-element envelope and the 2-element failure variant, `echo` returning no envelope at
 all, the broken `GetRunningFunc`, the 2-second `StopFunc`, millivolt battery readings.
 

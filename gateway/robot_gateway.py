@@ -31,7 +31,8 @@ from typing import Any, Union
 
 import httpx
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import (Depends, FastAPI, Header, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictFloat, StrictInt
@@ -52,6 +53,14 @@ MAX_DUTY = int(os.environ.get("TURBOPI_MAX_DUTY", "35"))
 LOW_BATTERY_V = float(os.environ.get("TURBOPI_LOW_BATTERY_V", "7.0"))
 
 TTL_MIN_MS, TTL_MAX_MS = 100, 2000
+
+# Sonar guard. Refuses forward motion closer than this, in millimetres; 0 disables it.
+# Never tested against the real sensor -- see docs/09-gateway.md before trusting it.
+SONAR_STOP_MM = int(os.environ.get("TURBOPI_SONAR_STOP_MM", "250"))
+SONAR_MAX_AGE_S = 0.75        # older than this and the guard has nothing to go on
+SONAR_POLL_IDLE_S = 1.0
+SONAR_POLL_DRIVING_S = 0.2    # only while a command is live; the guard needs fresh data
+WS_TELEMETRY_S = 1.0
 TELEMETRY_CACHE_S = 0.5          # contract: cache RPC answers for 500 ms
 LIVENESS_WINDOW_S = 5.0          # contract: "answered echo() in the last 5 s"
 PROBE_INTERVAL_S = 2.0
@@ -319,6 +328,8 @@ class State:
     pan_deg: float = 0.0
     tilt_deg: float = 0.0
 
+    ws_clients: int = 0
+
     def alive(self) -> bool:
         return self.echo_seen and (time.monotonic() - self.last_echo_ok) <= LIVENESS_WINDOW_S
 
@@ -350,6 +361,28 @@ def battery_fresh() -> float | None:
     if (time.monotonic() - state.battery_at) > BATTERY_STALE_S:
         return None
     return state.battery_v
+
+
+def sonar_fresh() -> int | None:
+    """
+    A distance we are willing to act on, or None.
+
+    Two readings mean "no idea", not "very close", and treating either as an obstacle
+    would make the robot undrivable:
+
+      99999  the vendor's getDistance() returns this when the I2C read throws
+          0  no echo came back -- on an ultrasonic sensor that usually means nothing is
+             in range at all, i.e. the opposite of near
+
+    Anything at or above the vendor's own 5000 mm ceiling is simply far.
+    """
+    if state.sonar_mm is None:
+        return None
+    if (time.monotonic() - state.sonar_at) > SONAR_MAX_AGE_S:
+        return None
+    if state.sonar_mm <= 0 or state.sonar_mm >= 99999:
+        return None
+    return state.sonar_mm
 
 
 # --------------------------------------------------------------------------------------
@@ -465,6 +498,25 @@ async def telemetry_refresh() -> None:
             pass
 
 
+async def sonar_poll_task() -> None:
+    """
+    Keep a distance reading fresh enough for the guard to use.
+
+    Polls hard only while a drive command is live. The robot's RPC server takes one
+    request at a time, so a 5 Hz poll running all the time would be competing with the
+    drive commands for the thing that matters most.
+    """
+    while True:
+        try:
+            value = await rpc.sonar_mm()
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                state.sonar_mm = int(value)
+                state.sonar_at = time.monotonic()
+        except (RobotUnreachable, RobotError):
+            pass
+        await asyncio.sleep(SONAR_POLL_DRIVING_S if state.motors_live else SONAR_POLL_IDLE_S)
+
+
 async def battery_poll_task() -> None:
     """
     Keep a battery reading warm even when nobody is polling /telemetry.
@@ -530,7 +582,8 @@ async def lifespan(app: FastAPI):
                     exc)
 
     tasks = [asyncio.create_task(coro()) for coro in
-             (watchdog_task, liveness_task, demo_probe_task, battery_poll_task)]
+             (watchdog_task, liveness_task, demo_probe_task, battery_poll_task,
+              sonar_poll_task)]
     log.info("gateway listening on %s:%d -> %s (max duty %d, low battery %.1f V)",
              HOST, PORT, RPC_URL, MAX_DUTY, LOW_BATTERY_V)
     try:
@@ -596,20 +649,29 @@ async def telemetry() -> dict:
                            else int((time.monotonic() - state.battery_at) * 1000)),
         "demo_detection": state.demo_probe_ok,
         "stop_owed": state.stop_owed,
+        "sonar_guard_mm": SONAR_STOP_MM,
+        "sonar_usable": sonar_fresh() is not None,
     }
 
 
-def refusal(status: int, reason: str, path: str = "/drive") -> JSONResponse:
-    log.warning("REFUSED %s - %s", path, reason)
-    return JSONResponse(status_code=status, content={"ok": False, "reason": reason})
+def refusal(status: int, reason: str, path: str = "/drive", **extra: Any) -> JSONResponse:
+    log.warning("REFUSED %s - %s%s", path, reason,
+                f" ({extra})" if extra else "")
+    return JSONResponse(status_code=status, content={"ok": False, "reason": reason, **extra})
 
 
-@app.post("/drive", dependencies=[Depends(require_token)])
-async def drive(body: DriveBody) -> Any:
-    vx = clamp(float(body.vx), -1.0, 1.0)
-    vy = clamp(float(body.vy), -1.0, 1.0)
-    omega = clamp(float(body.omega), -1.0, 1.0)
-    ttl_ms = clamp(float(body.ttl_ms), TTL_MIN_MS, TTL_MAX_MS)
+async def apply_drive(vx: Any, vy: Any, omega: Any, ttl_ms: Any) -> tuple[int, dict]:
+    """
+    The whole drive path, shared by POST /drive and the WebSocket.
+
+    Returns (status, body) rather than a response so the socket can report the same
+    outcomes as the HTTP route without either one growing its own copy of the safety
+    rules. There has to be exactly one place that decides whether the robot may move.
+    """
+    vx = clamp(float(vx), -1.0, 1.0)
+    vy = clamp(float(vy), -1.0, 1.0)
+    omega = clamp(float(omega), -1.0, 1.0)
+    ttl_ms = clamp(float(ttl_ms), TTL_MIN_MS, TTL_MAX_MS)
 
     if not state.alive():
         # Treat unreachable as a stop: forget that we are driving, so the watchdog does
@@ -618,7 +680,7 @@ async def drive(body: DriveBody) -> Any:
         with contextlib.suppress(RobotUnreachable, RobotError):
             await rpc.stop_motors()
             state.stop_owed = False
-        return refusal(503, "turbopi_unreachable")
+        return 503, {"ok": False, "reason": "turbopi_unreachable"}
 
     battery = battery_fresh()
     if battery is not None and battery < LOW_BATTERY_V:
@@ -626,25 +688,36 @@ async def drive(body: DriveBody) -> Any:
         with contextlib.suppress(RobotUnreachable, RobotError):
             await rpc.stop_motors()
             state.stop_owed = False
-        return refusal(409, "low_battery")
+        return 409, {"ok": False, "reason": "low_battery"}
 
     if state.demo_probe_ok and state.demo:
         # Do not stop the motors here: the demo is legitimately driving them, and
         # yanking them out from under it would be a surprise, not a safety measure.
-        return refusal(409, "demo_running")
+        return 409, {"ok": False, "reason": "demo_running"}
+
+    # The sonar guard blocks forward motion only. Reversing, strafing and rotating are
+    # how you get out of a corner, so blocking them would strand the robot against a wall
+    # with no way back. Unknown distance does not block -- see sonar_fresh().
+    if SONAR_STOP_MM > 0 and vx > 0:
+        distance = sonar_fresh()
+        if distance is not None and distance < SONAR_STOP_MM:
+            state.motors_live = False
+            with contextlib.suppress(RobotUnreachable, RobotError):
+                await rpc.stop_motors()
+                state.stop_owed = False
+            return 409, {"ok": False, "reason": "obstacle", "sonar_mm": distance}
 
     duties = wheel_duties(vx, vy, omega)
     try:
         await rpc.set_motor_duty(duties)
     except RobotUnreachable as exc:
         state.motors_live = False
-        log.error("REFUSED /drive - robot unreachable mid-command: %s", exc)
-        return JSONResponse(status_code=503,
-                            content={"ok": False, "reason": "turbopi_unreachable"})
+        log.error("REFUSED drive - robot unreachable mid-command: %s", exc)
+        return 503, {"ok": False, "reason": "turbopi_unreachable"}
     except RobotError as exc:
         state.motors_live = False
-        log.error("REFUSED /drive - robot said no: %s", exc)
-        return JSONResponse(status_code=502, content={"ok": False, "reason": str(exc)})
+        log.error("REFUSED drive - robot said no: %s", exc)
+        return 502, {"ok": False, "reason": str(exc)}
 
     state.last_drive_at = time.monotonic()
     state.ttl_s = ttl_ms / 1000.0
@@ -659,7 +732,16 @@ async def drive(body: DriveBody) -> Any:
         log.info("drive vx=%.2f vy=%.2f w=%.2f ttl=%.0fms duties=%s",
                  vx, vy, omega, ttl_ms, [duties[m] for m in (1, 2, 3, 4)])
 
-    return {"ok": True, "battery_v": battery}
+    return 200, {"ok": True, "battery_v": battery}
+
+
+@app.post("/drive", dependencies=[Depends(require_token)])
+async def drive(body: DriveBody) -> Any:
+    status, payload = await apply_drive(body.vx, body.vy, body.omega, body.ttl_ms)
+    if status != 200:
+        log.warning("REFUSED /drive - %s", payload.get("reason"))
+        return JSONResponse(status_code=status, content=payload)
+    return payload
 
 
 @app.post("/stop", dependencies=[Depends(require_token)])
@@ -715,6 +797,116 @@ async def look_set(body: LookBody) -> Any:
 @app.get("/look", dependencies=[Depends(require_token)])
 async def look_get() -> dict:
     return {"pan_deg": state.pan_deg, "tilt_deg": state.tilt_deg}
+
+
+# --------------------------------------------------------------------------------------
+# WebSocket control
+# --------------------------------------------------------------------------------------
+
+@app.websocket("/ws/drive")
+async def ws_drive(ws: WebSocket) -> None:
+    """
+    The low-latency control path. Same safety rules, without a request per command.
+
+    Why it exists: an HTTP client that waits for each response before sending the next
+    command can only send as often as the round trip allows. On a link whose round trip
+    exceeds the TTL -- which cellular does, routinely -- the watchdog fires between every
+    pair of commands and the robot stutters, and no amount of tuning on the client fixes
+    it, because the client cannot send faster than the network answers. One socket, with
+    commands as frames, decouples send rate from round-trip time entirely.
+
+    It also gives a better dead-man switch than the TTL: a closed socket is a released
+    stick, and TCP tells us within milliseconds on a LAN rather than after 500 ms of
+    silence.
+
+    Client -> server, as often as it likes (200 ms is plenty):
+        {"vx": 0.4, "vy": 0, "omega": -0.2, "seq": 41}        drive
+        {"stop": true}                                         stop now
+    ttl_ms is accepted and clamped, but a client should not send one.
+
+    Server -> client:
+        {"type":"ack","seq":41,"ok":true,"battery_v":7.97}
+        {"type":"ack","seq":42,"ok":false,"reason":"obstacle","sonar_mm":180}
+        {"type":"error","reason":"invalid_body"}               frame ignored, socket lives
+        {"type":"telemetry", ...}                              once a second
+
+    `seq` is echoed untouched so the client can measure its own round trip and show it.
+    Knowing the number is most of fixing it.
+    """
+    token = ws.headers.get("x-robot-token")
+    if TOKEN is None or not token or not secrets.compare_digest(token, TOKEN):
+        # Refused before accept, so it fails the handshake rather than opening a socket
+        # we then have to distrust.
+        log.warning("REFUSED /ws/drive - bad or missing X-Robot-Token")
+        await ws.close(code=1008)
+        return
+
+    await ws.accept()
+    state.ws_clients += 1
+    log.info("/ws/drive connected (%d open)", state.ws_clients)
+    send_lock = asyncio.Lock()
+
+    async def send(payload: dict) -> None:
+        async with send_lock:
+            await ws.send_json(payload)
+
+    async def telemetry_frames() -> None:
+        while True:
+            await asyncio.sleep(WS_TELEMETRY_S)
+            await telemetry_refresh()
+            with contextlib.suppress(Exception):
+                await send({"type": "telemetry", **(await telemetry())})
+
+    pump = asyncio.create_task(telemetry_frames())
+    try:
+        while True:
+            raw = await ws.receive_json()
+            if not isinstance(raw, dict):
+                await send({"type": "error", "reason": "invalid_body"})
+                continue
+
+            if raw.get("stop") is True:
+                state.motors_live = False
+                log.info("STOP requested over websocket")
+                try:
+                    await rpc.stop_motors()
+                    state.stop_owed = False
+                    await send({"type": "ack", "seq": raw.get("seq"), "ok": True})
+                except (RobotUnreachable, RobotError) as exc:
+                    await send({"type": "ack", "seq": raw.get("seq"), "ok": False,
+                                "reason": str(exc)})
+                continue
+
+            values = [raw.get("vx", 0), raw.get("vy", 0), raw.get("omega", 0),
+                      raw.get("ttl_ms", 500)]
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in values):
+                # A bad frame is not a reason to drop the control link -- that would turn
+                # one typo into a stopped robot. Say so and keep listening.
+                await send({"type": "error", "reason": "invalid_body"})
+                continue
+
+            status, payload = await apply_drive(*values)
+            await send({"type": "ack", "seq": raw.get("seq"),
+                        **{k: v for k, v in payload.items() if k != "ok"},
+                        "ok": status == 200})
+    except WebSocketDisconnect:
+        log.info("/ws/drive disconnected")
+    except Exception as exc:                       # noqa: BLE001 - see the stop below
+        log.warning("/ws/drive error: %s: %s", type(exc).__name__, exc)
+    finally:
+        pump.cancel()
+        state.ws_clients -= 1
+        # A dropped control socket means nobody is holding the stick. Do not wait out
+        # the TTL for something we already know.
+        if state.motors_live or state.stop_owed:
+            state.motors_live = False
+            log.info("/ws/drive closed while driving - stopping")
+            try:
+                await rpc.stop_motors()
+                state.stop_owed = False
+            except (RobotUnreachable, RobotError) as exc:
+                log.error("STOP ON DISCONNECT FAILED (%s) - watchdog will keep retrying",
+                          exc)
 
 
 def main() -> None:

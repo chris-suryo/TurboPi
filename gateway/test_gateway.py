@@ -23,6 +23,8 @@ import urllib.error
 import urllib.request
 
 import fake_rpc
+from websockets.sync.client import connect as ws_connect
+from websockets.exceptions import InvalidStatus
 
 RPC_PORT = 19030
 GW_PORT = 19031
@@ -351,7 +353,102 @@ def main() -> int:
         control(slow_methods={})
         poller.join(timeout=5)
 
-        print("\n== 16. SIGTERM ==")
+        print("\n== 16. the sonar guard ==")
+        control(reset_calls=True, sonar_mm=180)          # 18 cm: inside the 25 cm guard
+        time.sleep(0.5)
+        status, body = request("POST", "/drive", {"vx": 0.4, "ttl_ms": 500})
+        check("forward into an obstacle -> 409 obstacle",
+              status == 409 and body.get("reason") == "obstacle", f"got {status} {body}")
+        check("the refusal says how close it is", body.get("sonar_mm") == 180, str(body))
+        check("refusing on an obstacle also zeroes the motors",
+              duties() == {1: 0, 2: 0, 3: 0, 4: 0}, str(duties()))
+        status, _ = request("POST", "/drive", {"vx": -0.4, "ttl_ms": 500})
+        check("reverse is still allowed - you have to be able to back out", status == 200,
+              f"got {status}")
+        status, _ = request("POST", "/drive", {"vy": 0.4, "ttl_ms": 500})
+        check("strafing is still allowed", status == 200, f"got {status}")
+        status, _ = request("POST", "/drive", {"omega": 0.4, "ttl_ms": 500})
+        check("rotating is still allowed", status == 200, f"got {status}")
+        request("POST", "/stop")
+
+        for reading, label in ((0, "0 mm (no echo)"), (99999, "99999 (I2C error)")):
+            control(sonar_mm=reading)
+            time.sleep(0.5)
+            status, _ = request("POST", "/drive", {"vx": 0.4, "ttl_ms": 500})
+            check(f"{label} means unknown, not near - driving allowed", status == 200,
+                  f"got {status}")
+            request("POST", "/stop")
+        control(sonar_mm=412)
+        time.sleep(0.5)
+        status, body = request("GET", "/telemetry")
+        check("telemetry reports the guard threshold", body.get("sonar_guard_mm") == 250,
+              str(body))
+
+        print("\n== 17. websocket control ==")
+        url = f"ws://127.0.0.1:{GW_PORT}/ws/drive"
+        try:
+            ws_connect(url, additional_headers={"X-Robot-Token": "wrong"}).close()
+            check("websocket with a bad token is refused at the handshake", False, "accepted")
+        except InvalidStatus as exc:
+            check("websocket with a bad token is refused at the handshake",
+                  exc.response.status_code in (401, 403), str(exc))
+        except Exception as exc:
+            check("websocket with a bad token is refused at the handshake", False, repr(exc))
+
+        control(reset_calls=True)
+        with ws_connect(url, additional_headers={"X-Robot-Token": TOKEN}) as sock:
+            sock.send(json.dumps({"vx": 1, "vy": 0, "omega": 0, "seq": 41}))
+            ack = json.loads(sock.recv(timeout=5))
+            check("websocket drive is acked", ack.get("ok") is True and ack["type"] == "ack",
+                  str(ack))
+            check("the ack echoes seq so a client can measure its own round trip",
+                  ack.get("seq") == 41, str(ack))
+            check("websocket drive moves the same motors as HTTP would",
+                  duties() == {1: -35, 2: 35, 3: -35, 4: 35}, str(duties()))
+
+            sock.send(json.dumps({"vx": "fast", "seq": 42}))
+            err = json.loads(sock.recv(timeout=5))
+            check("a malformed frame is an error, not a disconnect",
+                  err.get("type") == "error" and err.get("reason") == "invalid_body", str(err))
+            sock.send(json.dumps({"vx": 0.5, "seq": 43}))
+            ack = json.loads(sock.recv(timeout=5))
+            check("the socket still works after a malformed frame",
+                  ack.get("ok") is True and ack.get("seq") == 43, str(ack))
+
+            sock.send(json.dumps({"stop": True, "seq": 44}))
+            ack = json.loads(sock.recv(timeout=5))
+            check("websocket stop is acked and zeroes the motors",
+                  ack.get("ok") is True and duties() == {1: 0, 2: 0, 3: 0, 4: 0},
+                  f"{ack} {duties()}")
+
+            frames, deadline = [], time.monotonic() + 3.0
+            sock.send(json.dumps({"vx": 0.3, "seq": 45}))
+            while time.monotonic() < deadline:
+                try:
+                    frame = json.loads(sock.recv(timeout=1.5))
+                except TimeoutError:
+                    break
+                frames.append(frame)
+                if frame.get("type") == "telemetry":
+                    break
+            telem = [f for f in frames if f.get("type") == "telemetry"]
+            check("telemetry arrives on the same socket - no second connection needed",
+                  bool(telem) and "battery_v" in telem[0], str(frames)[:200])
+
+        # Closing the socket while driving: the TTL was 500 ms but a dropped control
+        # link is not something to wait out.
+        control(reset_calls=True)
+        with ws_connect(url, additional_headers={"X-Robot-Token": TOKEN}) as sock:
+            sock.send(json.dumps({"vx": 0.5, "ttl_ms": 2000, "seq": 1}))
+            json.loads(sock.recv(timeout=5))
+        closed_at = time.monotonic()
+        stopped = wait_until(lambda: duties() == {1: 0, 2: 0, 3: 0, 4: 0}, 3.0, 0.02)
+        after = time.monotonic() - closed_at
+        check("closing the socket stops the robot", stopped, "still driving")
+        check("and does it immediately, not after the 2 s ttl", after < 0.5,
+              f"took {after*1000:.0f} ms")
+
+        print("\n== 18. SIGTERM ==")
         control(reset_calls=True)
         request("POST", "/drive", {"vx": 0.3, "ttl_ms": 2000})
         gateway.send_signal(signal.SIGTERM)
