@@ -1,0 +1,7 @@
+# Deliberately small. No robot libraries, no serial access, no OpenCV -- this service
+# only speaks HTTP to localhost:9030, so it cannot fight TurboPi.py for the camera or
+# the serial port the way anything importing HiwonderSDK would.
+fastapi>=0.110
+uvicorn>=0.27
+httpx>=0.27
+pydantic>=2.0

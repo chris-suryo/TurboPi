@@ -1,0 +1,219 @@
+# The safety gateway
+
+A small FastAPI service on the Pi that sits between a network client and the robot's own
+JSON-RPC server. The client talks to it and to nothing else on the robot.
+
+It exists for one reason. **Nothing in Hiwonder's stack ever stops the motors.** A duty
+value goes to the expansion board's microcontroller and is held indefinitely — there is
+no timeout in `RPCServer.py`, none in `TurboPi.py`, none in the SDK. A "drive" that
+arrives with its matching "stop" lost means a robot that keeps going until it hits
+something. The watchdog in this service is what prevents that, and it runs **on the
+robot**, on the near side of every link that can fail.
+
+| | |
+|---|---|
+| Listens | `0.0.0.0:9031` |
+| Forwards to | `http://127.0.0.1:9030/` (the robot's JSON-RPC) |
+| Auth | `X-Robot-Token: <secret>` on every endpoint except `/health` |
+| Secret | `/etc/turbopi/gateway-token`, mode 0600, owned by `pi` |
+| Source | [`gateway/robot_gateway.py`](../gateway/robot_gateway.py) |
+| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 62 checks, no robot needed |
+
+## Install
+
+On the Pi, having copied the `gateway/` directory over:
+
+```bash
+bash install_gateway.sh
+```
+
+It prints the shared secret at the end. That value goes in kona-tracker's `.env`.
+
+Then, to enable the `demo_running` guard (see "The GetRunningFunc bug" below):
+
+```bash
+python3 patch_getrunningfunc.py
+sudo systemctl restart turbopi
+sudo systemctl restart turbopi-gateway
+```
+
+## The API
+
+### `GET /health` — no auth
+
+```json
+{"ok": true, "turbopi": true, "battery_v": 7.97, "uptime_s": 412}
+```
+
+`turbopi` is whether `echo()` on port 9030 answered within the last 5 seconds; a
+background probe runs every 2 s. This endpoint reads cached values only and never touches
+the motors, so it is safe to poll hard and safe to call when you have no idea what state
+the robot is in.
+
+It has no auth deliberately: it is the endpoint you need most when something is wrong, and
+it exposes only liveness, battery voltage and uptime.
+
+### `GET /telemetry`
+
+```json
+{"battery_v": 7.97, "sonar_mm": 412, "driving": false, "demo": null,
+ "last_command_age_ms": 1200, "low_battery": false,
+ "battery_age_ms": 340, "demo_detection": true}
+```
+
+RPC answers are cached for 500 ms, so two viewers polling at 1 Hz do not double the load
+on the robot's single-threaded RPC server.
+
+Two keys beyond the contract, both additive and safe to ignore: `battery_age_ms` (how
+stale the voltage is — see "Battery readings are intermittent") and `demo_detection`
+(whether the `demo_running` guard is actually active).
+
+`last_command_age_ms` is **`null` before the first `/drive`**, not `0` — zero would mean
+"a command just arrived", which is the opposite of the truth.
+
+### `POST /drive`
+
+```json
+{"vx": 0.4, "vy": 0.0, "omega": -0.2, "ttl_ms": 500}
+```
+
+`vx` forward, `vy` left, `omega` counter-clockwise, each clamped to `[-1, 1]`. `ttl_ms`
+clamped to `[100, 2000]`. Anything non-numeric — a string, a boolean, `null`, a list — is
+refused with **400** and nothing is forwarded.
+
+| Response | When |
+|---|---|
+| `200 {"ok": true, "battery_v": 7.97}` | Accepted |
+| `400 {"ok": false, "reason": "invalid_body"}` | Non-numeric input |
+| `409 {"ok": false, "reason": "low_battery"}` | Below 7.0 V — motors are also zeroed |
+| `409 {"ok": false, "reason": "demo_running"}` | A built-in demo is driving |
+| `502 {"ok": false, "reason": "E03 - ..."}` | The robot answered and said no |
+| `503 {"ok": false, "reason": "turbopi_unreachable"}` | Port 9030 silent — treated as a stop |
+
+The client never sends motor ids. The gateway owns the kinematics and the wiring
+inversion.
+
+### `POST /stop`
+
+Always works: not gated by battery, demo state, or anything else. Motors go to zero
+synchronously, which is the part that matters, and the call returns in a few
+milliseconds.
+
+`StopFunc` is fired afterwards and **only if a demo is actually loaded**. That is not an
+optimisation — Hiwonder's `StopFunc` with nothing running raises inside the main-thread
+queue, never sets a result, and returns `E04 - Operation timeout!` after a full two
+seconds. The robot's RPC server handles one request at a time, so an unnecessary
+`StopFunc` would block the *next* stop for two seconds. A safety stop that can be delayed
+two seconds by a previous safety stop is not a safety stop.
+
+### `POST /look` and `GET /look`
+
+```json
+{"pan_deg": 0, "tilt_deg": -10}
+```
+
+Clamped to ±45° server-side. `GET` returns the last **clamped** values, not what was
+asked for.
+
+## The watchdog
+
+A background task on a 25 ms tick — a quarter of the shortest legal TTL. If the last
+`/drive` is older than the TTL it carried, all four motors go to zero. It is not a timer
+armed by the request, not a cancellation callback, and not anything the client can fail
+to trigger.
+
+Layers, outermost first:
+
+1. **The watchdog task** — covers the client, the network, the phone, the app.
+2. **The service's SIGTERM handler** — covers `systemctl stop/restart` and reboot.
+3. **`ExecStopPost=/home/pi/turbopi-stop-motors.sh`** — runs on *any* exit, including a
+   crash or a `SIGKILL`, when no Python of ours gets to run at all.
+4. **A stop on startup** — covers the case where the previous process died mid-drive.
+
+What none of them cover: the gateway's host losing power while the expansion board keeps
+its own. On this robot both are fed from the same battery, so that case does not arise.
+
+## Two vendor bugs this works around
+
+### The `GetRunningFunc` bug
+
+`RPCServer.py`:
+
+```python
+def GetRunningFunc():
+    return runbymainth("GetRunningFunc", ())
+```
+
+`runbymainth` begins `if callable(req)`. A string is not callable, so this returns
+`E05 - Not callable` **every time**. There is no path where it succeeds.
+`Functions/Running.py` already contains `getLoadedFunc`, which is what it was reaching
+for. [`scripts/patch_getrunningfunc.py`](../scripts/patch_getrunningfunc.py) changes the
+one line.
+
+Until it is applied, the gateway cannot see demo state. It says so — in its log at
+startup, and in `/telemetry`'s `demo_detection` — and leaves the `demo_running` guard
+off rather than reporting "no demo running" when it simply cannot tell.
+
+### Battery readings are intermittent
+
+`get_battery()` pops from a queue, and `TurboPi.py`'s own `voltageDetection` thread is
+draining that same queue once a second. So a read can legitimately come back `None`
+without anything being wrong.
+
+The gateway keeps a background poll at 1 Hz plus a last-known-good value, and treats a
+reading older than 30 s as unknown rather than as stale-but-good. **An unknown battery
+does not block driving** — refusing to drive whenever a queue read missed would make the
+robot unusable, and the failure would look identical to a flat battery. It reports
+`battery_v: null` and logs instead.
+
+## Why it proxies rather than driving the hardware directly
+
+`TurboPi.py` holds `/dev/ttyAMA0` exclusively, the same way it holds the camera. Any
+service importing `HiwonderSDK` and opening the board itself fails while TurboPi.py is
+running — and TurboPi.py is what serves the video. Hence four dependencies, no robot
+libraries, no serial access, no conflict.
+
+The robot's RPC server is `run_simple()` with threading off: **one request at a time**.
+The gateway therefore serialises its own calls behind a priority lock so a stop never
+queues behind a telemetry poll, and sends `Connection: close` on every request — a
+kept-alive connection to a single-threaded werkzeug server can hold that server open and
+block every other caller, including the watchdog.
+
+## Security, stated plainly
+
+The token is sent as a plain header over plain HTTP on the LAN. Anyone who can sniff
+your Wi-Fi can read it, and then drive the robot. That is an accepted trade for a robot
+that never leaves the LAN, is never port-forwarded, and is switched off most of the time
+— but it is a trade, not an absence of risk. TLS with a self-signed certificate is the
+upgrade if the threat model changes.
+
+`/health` is unauthenticated and leaks liveness, uptime and battery voltage to anything
+on the LAN.
+
+## Tests
+
+```bash
+cd gateway && python3 test_gateway.py
+```
+
+62 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
+the 3-element envelope and the 2-element failure variant, `echo` returning no envelope at
+all, the broken `GetRunningFunc`, the 2-second `StopFunc`, millivolt battery readings.
+
+The gateway runs as a real subprocess over real HTTP, the same way systemd runs it, so
+startup behaviour, the background watchdog and SIGTERM are exercised rather than
+simulated. No robot required.
+
+## Not verified against hardware
+
+Everything above is tested, but tested against a simulator. Two things can only be
+confirmed on the robot:
+
+1. **Which way `vy` and `omega` actually turn it.** The kinematics are derived from
+   `HiwonderSDK/mecanum.py` and cross-check against it (pure forward alternates duty
+   signs; pure rotation makes all four equal — both fall out of the wiring inversion).
+   But "positive `vy` moves left" rests on the mecanum roller orientation, which is a
+   physical fact nobody has measured on this robot. Drive it on a stand and watch.
+2. **Which way pan and tilt move.** `SetPWMServo` maps `+90 → 500 µs`, inverted from the
+   usual convention; the gateway negates to compensate. If either axis comes out
+   mirrored, flip `TURBOPI_PAN_SIGN` or `TURBOPI_TILT_SIGN` in the unit file and restart.

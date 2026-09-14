@@ -179,7 +179,9 @@ running** — and TurboPi.py is what serves your camera.
 The correct shape: a small service that **proxies to port 9030**. Dependencies: `fastapi`,
 `uvicorn`, `httpx`. That's it — no robot libraries, no serial access, no conflict.
 
-That service is also the right home for the answer to your next question.
+**Built.** [`gateway/robot_gateway.py`](gateway/robot_gateway.py), documented in
+[`docs/09-gateway.md`](docs/09-gateway.md), 62 passing tests in
+[`gateway/test_gateway.py`](gateway/test_gateway.py).
 
 ### Q7. **Does the robot stop on its own? NO.** [SOURCE] — and this is the important one
 
@@ -195,7 +197,9 @@ app:** the failure mode you're protecting against *is* the app becoming unreacha
 Tailscale, over Wi-Fi, or because the phone locked. A watchdog on the far side of the failing
 link cannot fire.
 
-**Recommended design** — the same FastAPI service from Q6:
+**Built** — the same FastAPI service from Q6, with four independent layers of stop:
+the background watchdog, a SIGTERM handler, a systemd `ExecStopPost` that runs even on a
+crash or `SIGKILL`, and a stop on startup. Design:
 
 - Accepts drive commands with a **mandatory TTL** (say 500 ms)
 - Forwards them to `:9030`
@@ -327,7 +331,7 @@ You keep a list. Nothing has been installed for this yet — these are proposals
 
 | Package | Why | Needed? |
 |---|---|---|
-| `fastapi`, `uvicorn`, `httpx` | The watchdog/proxy service (Q6, Q7, Q11) | **Strongly recommended** — safety |
+| `fastapi`, `uvicorn`, `httpx`, `pydantic` | The watchdog/proxy service (Q6, Q7, Q11), in a dedicated venv at `/home/pi/gateway-venv` | **Built** — see `docs/09-gateway.md` |
 | systemd unit (no package) | Autostart `TurboPi.py` (Q12) | **Recommended** — you asked for it |
 | `mediamtx` + `ffmpeg` | RTSP republish | Optional — only if you want option 1 |
 

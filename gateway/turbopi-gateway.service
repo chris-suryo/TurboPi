@@ -1,0 +1,29 @@
+[Unit]
+Description=TurboPi safety gateway (drive API with motor watchdog)
+Documentation=https://github.com/chris-suryo/TurboPi/blob/main/docs/09-gateway.md
+# Ordering only, not a hard dependency: if TurboPi.py is down the gateway still starts,
+# answers /health with turbopi=false, and refuses to drive. That is more useful than
+# failing to start, because /health is how you find out the robot is down.
+After=network-online.target turbopi.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi
+Environment=TURBOPI_GATEWAY_TOKEN_FILE=/etc/turbopi/gateway-token
+Environment=TURBOPI_RPC_URL=http://127.0.0.1:9030/
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/gateway-venv/bin/python /home/pi/robot_gateway.py
+
+# Runs on every exit, including a crash or a SIGKILL, when no Python of ours gets to run.
+ExecStopPost=/home/pi/turbopi-stop-motors.sh
+
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
