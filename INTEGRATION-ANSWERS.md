@@ -16,6 +16,32 @@ the rest rather than guessing. Nothing below is presented as tested when it wasn
 
 ## The two that decide everything
 
+### ⚠️ Read this before anything else: the camera is not on by default [SOURCE]
+
+`TurboPi.py` constructs `Camera.Camera()` but **never calls `camera_open()`**. The only thing
+that opens the camera is `Functions/Running.py`'s `loadFunc()` — i.e. **loading a demo**.
+
+So a freshly started robot serves **no frames at all**, and the failure is silent in an
+unusually nasty way: `MjpgServer`'s snapshot branch does nothing when there is no frame — it
+sends no status line, no headers, nothing — and the connection closes. `curl` reports that as
+**HTTP 000**, which is indistinguishable from the server being down. `GET /` meanwhile returns
+200, because the streaming branch sends headers before checking for frames.
+
+It gets worse for your use case: `unloadFunc()` calls `camera_close()`, so the stream also dies
+whenever a demo is unloaded.
+
+That is reasonable for Hiwonder's own app, where you always load a demo first. **It is wrong
+for treating the robot as a camera source another machine can just connect to**, which is
+exactly what kona-tracker needs.
+
+**Fixed by `scripts/patch_camera_always_on.py`** — opens the camera at startup and reopens it
+if something closes it. Demos still work unchanged.
+
+```bash
+~/turbopi-venv/bin/python ~/patch_camera_always_on.py
+sudo systemctl restart turbopi
+```
+
 ### Q1. Stream URL — **yes, the picture can leave the robot** [SOURCE]
 
 | | |

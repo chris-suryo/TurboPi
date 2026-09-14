@@ -130,6 +130,7 @@ to reach the robot. Reasoning in
 | [`scripts/camera_multireader_test.sh`](scripts/camera_multireader_test.sh) | Can the camera be read from another machine, by more than one reader? Run on the **client** |
 | [`scripts/patch_optional_demos.py`](scripts/patch_optional_demos.py) | Stops a broken mediapipe from blocking the whole robot app |
 | [`scripts/install_turbopi_service.sh`](scripts/install_turbopi_service.sh) | Run the robot as a systemd service — autostart, crash restart, survives SSH |
+| [`scripts/patch_camera_always_on.py`](scripts/patch_camera_always_on.py) | Camera streams without a demo loaded — upstream only opens it via `loadFunc()` |
 
 ## Two bugs that cost an evening each — both configuration, not hardware
 
