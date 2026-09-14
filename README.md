@@ -95,7 +95,7 @@ better base for a Pi 5.
 | 2. Physical fit check | ✅ 52Pi case ruled out; RTC battery + board revision pending at mount time |
 | 3. Build robot software on clean Raspberry Pi OS | ✅ **DONE** — all deps installed, I2C + UART enabled, OpenCV 5 verified |
 | 4. Assemble and drive | ✅ **All subsystems verified** — see [`PHASE1-RESULTS.md`](PHASE1-RESULTS.md) |
-| 5. Camera and built-in demos | Camera verified; demos next — see `docs/06-running-the-demos.md` |
+| 5. Camera and built-in demos | ✅ **Camera streaming, multi-reader verified** (18.9 fps, two simultaneous clients); demos next — see `docs/06-running-the-demos.md` |
 | 6. Concepts | Written, read as you go |
 
 **The image turned out not to be a blocker.** It was initially assessed as one; on checking,

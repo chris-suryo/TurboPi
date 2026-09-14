@@ -184,3 +184,34 @@ signal. Limp means unpowered, so the fault is power. One test, two branches, no 
 
 Expected on a stand. The sensor reports `True` for "black", and with nothing beneath it there
 is no reflection to detect. It will vary on a floor.
+
+---
+
+# Camera stream verification (2026-09-14)
+
+Run from the Mac with `scripts/camera_multireader_test.sh 10.0.0.3`, against `TurboPi.py`
+running as a systemd service with `patch_camera_always_on.py` applied. All five sections
+passed.
+
+| Check | Result |
+|---|---|
+| Stream URL | `http://10.0.0.3:8080/` — reachable, no credentials |
+| Snapshot URL | `http://10.0.0.3:8080/?action=snapshot` — 190692-byte JPEG, `FFD8` magic verified |
+| Single reader | **18.9 fps** (server ceiling is 20 fps — `time.sleep(0.05)` per frame) |
+| Two simultaneous readers | **A 18.7 fps / B 18.6 fps** — both received video |
+| Snapshot during a live stream | Works — 212958 bytes |
+
+Live 640×480 video also confirmed visually in a browser.
+
+**What this settles.** The picture can leave the robot, and it can leave it to more than one
+consumer at once — adding a second reader cost about 1% of frame rate. The single-reader
+constraint is on `/dev/video0` (which `TurboPi.py` holds exclusively), not on the network
+stream. So an external app can consume the stream continuously while someone else watches in
+a browser, with no coordination between them.
+
+**Not established:** multi-hour stability, or behaviour with three or more readers. Two
+readers for about ten seconds each is what was measured.
+
+**Picture quality** looks soft. That is expected: a 640×480 frame at JPEG quality 70 from a
+low-cost USB webcam. Raising `Camera.py`'s resolution and the encoder's quality is possible,
+at the cost of bandwidth and frame rate — not worth doing until there's a reason.

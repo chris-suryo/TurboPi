@@ -42,7 +42,7 @@ if something closes it. Demos still work unchanged.
 sudo systemctl restart turbopi
 ```
 
-### Q1. Stream URL — **yes, the picture can leave the robot** [SOURCE]
+### Q1. Stream URL — **yes, the picture can leave the robot** [MEASURED 2026-09-14]
 
 | | |
 |---|---|
@@ -54,35 +54,43 @@ sudo systemctl restart turbopi
 **This is your option 2 (MJPEG over plain HTTP), not option 1 (RTSP).** There is no RTSP
 server in TurboPi. See "Getting RTSP" below — it's achievable and I recommend it.
 
-### The multi-reader question — **the camera is single-reader, but that doesn't block you**
+**Confirmed on your hardware**, from the Mac, with `scripts/camera_multireader_test.sh`:
+reachable, bytes verified as real JPEG (`FFD8` magic, 190692 bytes), **18.9 fps** sustained on
+a single reader. Live video also confirmed visually in a browser at `http://10.0.0.3:8080/`.
+
+### The multi-reader question — **ANSWERED: multiple network readers work** [MEASURED 2026-09-14]
 
 Two separate facts, and conflating them is what costs people days:
 
 **`/dev/video0` IS single-reader.** [SOURCE] `Camera.py` opens `cv2.VideoCapture(-1)` in a
 background thread and holds it for the process lifetime. While `TurboPi.py` runs, **nothing
-else on the Pi can open the camera device** — not another script, not ffmpeg, not v4l2. That's
-the failure that cost you two days, and it's real here.
+else on the Pi can open the camera device** — not another script, not ffmpeg, not v4l2. That
+constraint is real, and it is why anything wanting the picture must go through port 8080.
 
 **But the MJPEG server re-publishes those frames over the network**, and that server is a
-`ThreadingHTTPServer` — one thread per client. [SOURCE] So multiple *network* readers should
-work even though multiple *device* readers cannot.
+`ThreadingHTTPServer` — one thread per client. [SOURCE] So multiple *network* readers work even
+though multiple *device* readers cannot — and that is now measured, not predicted:
 
-One caveat I want to flag because it's in the code and could surprise you: `MjpgServer.py`
-sets the shared `img_show` global to `None` at the start of every new stream request. A second
-viewer connecting should therefore cause a **brief blip** for the first, because `TurboPi.py`'s
-main loop overwrites `img_show` continuously. Momentary, not fatal — but it's the kind of thing
-worth seeing rather than trusting.
+| Test | Result |
+|---|---|
+| Single reader | **18.9 fps** |
+| Two simultaneous readers | **A 18.7 fps / B 18.6 fps** — both received video |
+| Degradation from adding the second reader | **~0.2 fps (about 1%)** |
+| Snapshot (`?action=snapshot`) *while* a stream is running | **Works** — 212958-byte JPEG |
 
-**[NEEDS TEST]** — run this **from the Windows PC or the Mac**, not the robot:
+**What this means for kona-tracker, concretely:** the app can hold a continuous stream while
+you simultaneously watch the robot in a browser, or pull snapshots, without either one
+breaking the other. The 20 fps ceiling is the server's `time.sleep(0.05)`, not contention —
+18.9 fps measured against a 20 fps theoretical maximum is the network and JPEG encode, and it
+does not move when a second reader arrives.
 
-```bash
-./scripts/camera_multireader_test.sh 10.0.0.3
-```
+**The `img_show = None` blip I flagged from source did not materialise as a problem.** The code
+does reset that global per stream request, but the main loop overwrites it fast enough that
+neither reader lost frames measurably. Recorded as: real in the code, not observable in
+practice at this frame rate.
 
-It checks reachability, verifies the bytes are really JPEG, measures single-reader frame rate,
-then opens **two simultaneous readers** and reports whether both get video and whether the
-first degrades. I validated the script's frame counting against a replica of the robot's
-server (it correctly measured 20.0 fps, matching the 50 ms inter-frame sleep in the source).
+One thing this does **not** prove: sustained multi-hour stability, or behaviour with three or
+more readers. Two readers over ~10 seconds each is what was tested.
 
 ---
 
@@ -327,10 +335,14 @@ You keep a list. Nothing has been installed for this yet — these are proposals
 
 ## What I need from you
 
-1. **`./scripts/camera_multireader_test.sh 10.0.0.3`** from the PC or Mac — answers Q1 properly
-   and the multi-reader question
-2. **The PowerShell reachability output** from the Windows PC (Q10)
-3. **A latency estimate** from the wave test (Q3)
-4. **A yes/no on the watchdog service and the systemd unit** — I'll build both
+1. ~~`./scripts/camera_multireader_test.sh 10.0.0.3`~~ — **done 2026-09-14, all five sections
+   passed.** Results recorded above. Q1 and the multi-reader question are closed.
+2. ~~The systemd unit~~ — **done.** `scripts/install_turbopi_service.sh` is installed and the
+   service comes back on boot.
+3. **The PowerShell reachability output** from the Windows PC (Q10) — still open, and it is the
+   one that matters, since the PC is the only machine that talks to cameras
+4. **A latency estimate** from the wave test (Q3)
+5. **A yes/no on the watchdog service** — I'll build it. Q7 is the reason: nothing in the
+   vendor stack ever stops the motors on its own
 
 Everything else is either answered above from source, or waits on those.

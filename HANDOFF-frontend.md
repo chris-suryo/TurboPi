@@ -33,9 +33,14 @@ gracefully — the robot is often powered off.
 | `GET http://<robot>:8080/` | MJPEG stream, `multipart/x-mixed-replace; boundary=--boundarydonotcross` |
 | `GET http://<robot>:8080/?action=snapshot` | One JPEG |
 
-640×480, ~20 fps ceiling (the server sleeps 50 ms per frame). Display it with a plain
-`<img src="http://10.0.0.3:8080/">` — image loads are exempt from CORS. Do **not** try to
-`fetch()` it; that is subject to CORS and will fail.
+640×480, **measured at 18.9 fps** against a ~20 fps ceiling (the server sleeps 50 ms per
+frame). Display it with a plain `<img src="http://10.0.0.3:8080/">` — image loads are exempt
+from CORS. Do **not** try to `fetch()` it; that is subject to CORS and will fail.
+
+**The stream is multi-reader — measured, not assumed.** Two simultaneous clients got 18.7 and
+18.6 fps, and `?action=snapshot` kept working while both streams ran. So your component can
+hold the stream without breaking anything else that is watching the robot, and you do not need
+to coordinate access or build a single-consumer lock.
 
 Show a clear placeholder when the stream is unreachable, and give the user a way to reconnect.
 A dead MJPEG connection does not always fire an `error` event, so consider a watchdog that
@@ -188,6 +193,13 @@ operator visits.
 among several in your app. The constraint stands: while `TurboPi.py` runs it holds
 `/dev/video0` exclusively, so port 8080 is the only way in.
 
-**Nothing autostarts.** `TurboPi.py` must be running for either port to exist. If you want the
-robot available on boot, that's a systemd unit — worth adding before you build a UI that
-assumes the robot is reachable.
+**Autostart is handled.** `TurboPi.py` now runs as a systemd unit
+(`scripts/install_turbopi_service.sh`) that starts on boot, waits for the network, and restarts
+on crash — so both ports come back after a reboot or a battery swap without anyone SSHing in.
+
+**One patch was required to make the camera usable this way.** Stock `TurboPi.py` never calls
+`camera_open()` — only loading a demo does — so a freshly started robot served no frames, and
+`?action=snapshot` failed by sending *no HTTP response at all* (curl reports `000`, which looks
+identical to a dead server). `scripts/patch_camera_always_on.py` opens the camera at startup.
+Without it, a frontend against a freshly booted robot sees a permanently broken image with no
+useful error.
