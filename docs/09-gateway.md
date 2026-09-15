@@ -17,7 +17,7 @@ robot**, on the near side of every link that can fail.
 | Auth | `X-Robot-Token: <secret>` on every endpoint except `/health` |
 | Secret | `/etc/turbopi/gateway-token`, mode 0600, owned by `pi` |
 | Source | [`gateway/robot_gateway.py`](../gateway/robot_gateway.py) |
-| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 86 checks, no robot needed |
+| Tests | [`gateway/test_gateway.py`](../gateway/test_gateway.py) — 108 checks, no robot needed |
 
 ## Install
 
@@ -163,6 +163,27 @@ socket is a released stick, and TCP says so within milliseconds on a LAN.
 
 Clamped to ±45° server-side. `GET` returns the last **clamped** values, not what was
 asked for.
+
+### `POST /led` and `GET /led` — the two front RGBs
+
+```json
+{"on": true, "r": 0, "g": 255, "b": 40}
+```
+
+Channels clamped to 0–255. `GET` returns the last state asked for, or all `null` before
+anything has been. Switching off writes black to the hardware but **remembers the colour**,
+so a UI toggling back on does not come back black.
+
+**These work when `TurboPi.py` is down**, unlike everything else here. The LEDs live on the
+ultrasonic module at I2C `0x77`, not on the serial bus the motors use, and
+`HiwonderSDK/Sonar.py` opens and closes SMBus per transaction rather than holding it — so
+the gateway drives them directly and nothing contends. It also keeps LED traffic off the
+single-threaded RPC server, where drive commands live.
+
+Two things to know. `Functions/Avoidance.py` writes these same LEDs, so a running demo will
+fight a UI for them — the demo wins, intermittently. And a colour is three sequential byte
+writes, so a write interleaved with the demo's can show a wrong colour for a frame. Neither
+is dangerous; both are worth not being surprised by.
 
 ## The sonar guard
 
@@ -315,7 +336,7 @@ on the LAN.
 cd gateway && python3 test_gateway.py
 ```
 
-86 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
+108 checks against a stand-in for the robot's RPC server that reproduces its real quirks:
 the 3-element envelope and the 2-element failure variant, `echo` returning no envelope at
 all, the broken `GetRunningFunc`, the 2-second `StopFunc`, millivolt battery readings.
 

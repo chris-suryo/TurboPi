@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import secrets
@@ -88,6 +89,19 @@ DRIVE_LOG_INTERVAL_S = 2.0
 # follow the conventional sense. Which physical direction that turns out to be is a
 # mechanical fact that has NOT been verified against the assembled robot -- if pan or
 # tilt comes out mirrored, flip the sign here, restart, done.
+# The two front RGBs live on the ultrasonic module at I2C 0x77, registers 2-8, NOT on the
+# serial bus the motors use. HiwonderSDK/Sonar.py opens and closes SMBus per transaction
+# rather than holding it, so a second process can drive them without fighting TurboPi.py
+# for anything. That is why /led works when the robot's own software is down and /drive
+# does not.
+LED_I2C_BUS = int(os.environ.get("TURBOPI_LED_I2C_BUS", "1"))
+LED_I2C_ADDR = int(os.environ.get("TURBOPI_LED_I2C_ADDR", "0x77"), 0)
+LED_REG_MODE = 2           # 0 = manual colour; TurboPi.py sets this at startup
+LED_REG_PIXEL = (3, 6)     # first register of each pixel; then +1 green, +2 blue
+#: Test hook. When set, LED writes go to this file as JSON lines instead of the I2C bus,
+#: so the HTTP contract can be exercised without hardware. Never set in production.
+LED_TRACE = os.environ.get("TURBOPI_LED_TRACE", "")
+
 PAN_SIGN = int(os.environ.get("TURBOPI_PAN_SIGN", "-1"))
 TILT_SIGN = int(os.environ.get("TURBOPI_TILT_SIGN", "-1"))
 SERVO_TILT, SERVO_PAN = 1, 2     # confirmed from Functions/ColorTracking.py: servo_x = servo2
@@ -367,6 +381,10 @@ class State:
 
     ws_clients: int = 0
 
+    # Last colour this gateway asked for. None until it has asked for one -- on a restart
+    # the LEDs physically hold whatever they were showing, same as the servos.
+    led: dict | None = None
+
     def alive(self) -> bool:
         return self.echo_seen and (time.monotonic() - self.last_echo_ok) <= LIVENESS_WINDOW_S
 
@@ -573,6 +591,36 @@ async def battery_poll_task() -> None:
 # --------------------------------------------------------------------------------------
 # App
 # --------------------------------------------------------------------------------------
+
+def write_leds(on: bool, red: int, green: int, blue: int) -> None:
+    """
+    Set both front RGBs. Raises RobotUnreachable if the bus is not there.
+
+    Runs in a worker thread via asyncio.to_thread -- SMBus is blocking, and blocking the
+    event loop would delay the watchdog, which is the one thing that must never wait.
+    """
+    red, green, blue = (0, 0, 0) if not on else (red, green, blue)
+
+    if LED_TRACE:
+        with open(LED_TRACE, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"on": on, "r": red, "g": green, "b": blue}) + "\n")
+        return
+
+    try:
+        from smbus2 import SMBus
+    except ImportError as exc:
+        raise RobotUnreachable("smbus2 is not installed in the gateway venv") from exc
+
+    try:
+        with SMBus(LED_I2C_BUS) as bus:
+            bus.write_byte_data(LED_I2C_ADDR, LED_REG_MODE, 0)   # manual colour mode
+            for first in LED_REG_PIXEL:
+                bus.write_byte_data(LED_I2C_ADDR, first, red)
+                bus.write_byte_data(LED_I2C_ADDR, first + 1, green)
+                bus.write_byte_data(LED_I2C_ADDR, first + 2, blue)
+    except OSError as exc:
+        raise RobotUnreachable(f"I2C write failed: {exc}") from exc
+
 
 async def require_token(x_robot_token: str | None = Header(default=None)) -> None:
     if TOKEN is None:
@@ -841,6 +889,36 @@ async def look_set(body: LookBody) -> Any:
         return JSONResponse(status_code=502, content={"ok": False, "reason": str(exc)})
     state.pan_deg, state.tilt_deg = pan, tilt
     return {"ok": True}
+
+
+class LedBody(BaseModel):
+    model_config = {"extra": "forbid"}
+    on: bool = True
+    r: Number = 0
+    g: Number = 0
+    b: Number = 0
+
+
+@app.post("/led", dependencies=[Depends(require_token)])
+async def led_set(body: LedBody) -> Any:
+    red, green, blue = (int(clamp(float(v), 0, 255)) for v in (body.r, body.g, body.b))
+    on = bool(body.on)
+    try:
+        await asyncio.to_thread(write_leds, on, red, green, blue)
+    except RobotUnreachable as exc:
+        log.warning("REFUSED /led - %s", exc)
+        return JSONResponse(status_code=503,
+                            content={"ok": False, "reason": "led_unavailable"})
+    # The requested colour is remembered even when switched off, so a UI can restore it
+    # on the next toggle rather than coming back black.
+    state.led = {"on": on, "r": red, "g": green, "b": blue}
+    log.info("led on=%s rgb=(%d,%d,%d)", on, red, green, blue)
+    return {"ok": True}
+
+
+@app.get("/led", dependencies=[Depends(require_token)])
+async def led_get() -> dict:
+    return state.led or {"on": None, "r": None, "g": None, "b": None}
 
 
 @app.get("/look", dependencies=[Depends(require_token)])

@@ -104,7 +104,10 @@ def main() -> int:
     token_file.write(TOKEN + "\n")
     token_file.close()
 
+    led_trace = tempfile.NamedTemporaryFile("w", suffix=".led", delete=False)
+    led_trace.close()
     env = dict(os.environ,
+               TURBOPI_LED_TRACE=led_trace.name,
                TURBOPI_GATEWAY_TOKEN_FILE=token_file.name,
                TURBOPI_RPC_URL=f"{RPCBASE}/",
                TURBOPI_GATEWAY_HOST="127.0.0.1",
@@ -360,6 +363,36 @@ def main() -> int:
         check("telemetry carries the pose, so a page needs no second round trip",
               body.get("pan_deg") == 10.0 and "tilt_deg" in body, str(body))
 
+        print("\n== 11b. the front LEDs ==")
+        def led_lines():
+            with open(led_trace.name, encoding="utf-8") as handle:
+                return [json.loads(line) for line in handle if line.strip()]
+
+        status, body = request("GET", "/led")
+        check("/led is unknown before anything has been asked for",
+              body == {"on": None, "r": None, "g": None, "b": None}, str(body))
+        status, body = request("POST", "/led", {"on": True, "r": 0, "g": 255, "b": 40})
+        check("/led -> 200 {ok:true}", status == 200 and body == {"ok": True},
+              f"got {status} {body}")
+        check("both pixels get the colour",
+              led_lines()[-1] == {"on": True, "r": 0, "g": 255, "b": 40}, str(led_lines()[-1]))
+        status, body = request("GET", "/led")
+        check("/led reports what was asked for",
+              body == {"on": True, "r": 0, "g": 255, "b": 40}, str(body))
+        request("POST", "/led", {"on": False, "r": 0, "g": 255, "b": 40})
+        check("off writes black to the hardware",
+              led_lines()[-1]["r"] == 0 and led_lines()[-1]["g"] == 0, str(led_lines()[-1]))
+        status, body = request("GET", "/led")
+        check("but remembers the colour, so a toggle does not come back black",
+              body == {"on": False, "r": 0, "g": 255, "b": 40}, str(body))
+        request("POST", "/led", {"on": True, "r": 999, "g": -5, "b": 40})
+        check("channels are clamped to 0-255",
+              led_lines()[-1]["r"] == 255 and led_lines()[-1]["g"] == 0, str(led_lines()[-1]))
+        status, _ = request("POST", "/led", {"on": True, "r": "red"})
+        check("non-numeric channel -> 400", status == 400, f"got {status}")
+        status, _ = request("POST", "/led", {"on": True, "r": 0, "g": 0, "b": 0, "x": 1})
+        check("unknown field -> 400", status == 400, f"got {status}")
+
         print("\n== 12. robot says no ==")
         control(fail_methods=["SetBrushMotor"])
         status, body = request("POST", "/drive", {"vx": 0.2, "ttl_ms": 500})
@@ -527,6 +560,7 @@ def main() -> int:
             gateway.kill()
         out = gateway.stdout.read() if gateway.stdout else ""
         os.unlink(token_file.name)
+        os.unlink(led_trace.name)
 
     print("\n== gateway log ==")
     for line in out.splitlines():
