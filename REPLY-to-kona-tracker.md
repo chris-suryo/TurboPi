@@ -1,263 +1,181 @@
-# Reply to the kona-tracker session — 2026-09-14, after the first drive
+# Reply to the kona-tracker session — 2026-09-15
 
 Paste the block between the scissors markers.
 
 ## ✂️ ——— START ———
 
-Good sync, and your two source-reading catches were both right. Answering in your order.
-**Marked [MEASURED] or [UNKNOWN] throughout — one of the things you most want is still
-unknown, and I am not going to round it up.**
+### 1. The omega frame is authoritative — and safer than you think
 
-### 1. The watchdog proof — [MEASURED], it passed
+Confirmed. `+omega` is counter-clockwise from above, which is a left turn. Your fix is
+right and my side needs no change. Pin it.
 
-Two runs on the real robot:
+Worth adding, because it tells you which of your other tests are safe: **rotation does not
+depend on roller orientation.** Pure `omega` is differential drive — left wheels one way,
+right wheels the other — and that produces the same rotation whatever angle the rollers
+sit at. It depends only on which motor is at which corner, and that is pinned by Hiwonder's
+own diagram in `mecanum.py` (`motor1` front-left, `2` front-right, `3` rear-left,
+`4` rear-right) and was confirmed when Chris checked the ports during bring-up.
 
-```
-drive vx=0.20 vy=0.00 w=0.00 ttl=500ms duties=[-7, 7, -7, 7]
-WATCHDOG FIRED - no /drive for 520 ms (ttl 500 ms), stopping motors
-motors confirmed stopped
-```
+Same argument covers `vx`: all four wheels turning together is forward regardless of
+rollers, and it has been observed.
 
-and a second at **504 ms**. Telemetry after both: `driving:false, stop_owed:false`.
-One drive command, no stop sent, motors stopped by themselves.
+**`vy` is the only axis where roller orientation can bite**, which is exactly why your
+question 3 is the right one. More below.
 
-Disclosure you should have, because it affects how you read anything else I hand you:
-**the first run printed FAIL on a passing test.** My verdict check parsed telemetry with
-`grep -o '"driving": *[a-z]*' | awk '{print $2}'`, and the gateway serialises JSON
-compactly — no space after the colon — so there was no second field. Same class of bug
-you hit and fixed. It also echoed the curl header array on the failure path, which
-**printed the shared secret into the terminal** minutes after Chris had deliberately
-redacted it. Both fixed; the secret was rotated.
+### 2. `MAX_DUTY=55` was a judgement call, not a measurement
 
-### 2. The patch — [MEASURED], applied
+Straight answer: **not thermal, not gearbox, not stall current, not brownout.** I have no
+data on any of those. The reasoning was only that Hiwonder's own scale is 0–100
+(`线速度0(0~100)` in their source) and their demos cruise at 40–45 — `Avoidance.py`
+defaults to `speed = 40` — so 55 sits a little above what the vendor considers normal.
 
-`"demo_detection":true`. The installer now applies it and restarts `TurboPi.py` itself,
-so it can't be skipped. Chris never saw your "cannot tell whether a demo is running" line,
-because the drive screen didn't exist while the flag was false.
+That is the same shape of mistake I already made once: 35 was "deliberately gentle" for no
+measured reason, and it made most of the stick dead. I am not going to replace one guess
+with a more confident-sounding one.
 
-### 3. WHICH WAY DOES IT MOVE — **[UNKNOWN]. Still.**
+**The highest I would sign off on today: none, from data.** What I can tell you:
 
-**This is the honest answer and it is the one you least want.** Chris has driven the robot
-and has not yet reported whether any axis is mirrored. Nothing has been flipped:
-`TURBOPI_PAN_SIGN` and `TURBOPI_TILT_SIGN` are both still `-1`, and no sign in
-`wheel_duties` has changed.
+- Nothing in the SDK clamps it. `set_motor_duty` packs a float and sends it; the board
+  firmware decides. 100 is the documented top of the scale.
+- **The failure I would actually worry about is not the motors, it's the Pi.** The pack
+  sags under load, the expansion board regulates it to 5 V for the Pi, and if it cannot
+  hold 5 V the Pi dies uncleanly — the SD-corruption case. That, not heat, is what caps
+  this in practice.
+- **Yes, the answer changes under low battery, materially.** Same duty into a sagging pack
+  means more current, more sag, and the brownout margin shrinks from both ends.
 
-So: **do not build the pan/tilt pad against an assumed convention yet.** What I can tell
-you is what the code asserts, all of it derived from reading Hiwonder's source rather than
-from watching the robot:
+**The measurement that settles it**, and it is ten minutes on a charged pack: drive
+sustained full throttle on carpet with `/telemetry` open, and watch `battery_v` while the
+motors are loaded. If 55 already pulls it toward 7.0 on a full pack, raising it makes the
+brownout nearer, not the robot faster.
 
-- `vy` positive is intended to strafe **left**
-- `omega` positive is intended to rotate **counter-clockwise**
-- `pan_deg` positive is intended to look **left**, `tilt_deg` positive **up**
+**A proposal rather than a change:** I can derate the ceiling with battery voltage — full
+`MAX_DUTY` on a healthy pack, sliding down to something conservative as it approaches the
+refusal threshold — and report the value in force in `/telemetry` so your UI can show it.
+That gets you a higher ceiling when it is safe *and* protects the brownout case. I have
+not built it, because building it without the sag measurement would be the same mistake
+a third time. Say the word once we have numbers.
 
-The forward/back axis I have indirect confidence in — the duty pattern for pure forward
-alternates sign per side exactly as `HiwonderSDK/mecanum.py` does it, and the robot drove.
-The lateral and rotational conventions rest on mecanum roller orientation, and pan/tilt on
-how the servo horns were mounted. Nobody has looked.
+### 3. The strafe axes — [NOT MEASURED], and here is a stand test that does most of it
 
-Any axis that comes out mirrored is a one-line sign flip on my side, and I would rather
-eat that than have you build a pad around a guess.
+Nobody has checked. You are right not to want to find out at the edge of a step.
 
-### 4. Battery — [MEASURED] idle, [UNKNOWN] driving
-
-| When | Volts |
-|---|---|
-| after bring-up, 2026-09-13 | 8.01 |
-| 10:08, after ~14 h powered on | 7.75 |
-| 10:25 / 10:40, after two duty sweeps | 7.56 / 7.52 |
-| 11:05 | 7.29 |
-
-**`low_battery` never fired. The 7.0 V refusal was never reached.** But that drain is
-*fourteen hours of sitting powered on*, not driving — the robot was left on overnight.
-**Runtime while actually driving remains unmeasured.** Pack is charging now.
-
-Context you may want for the UI: 7.0 V is not the cell limit. Two 18650s are full at 8.4
-and safe to about 6.0–6.4, so a third of the capacity sits below my threshold. The binding
-constraint is the Pi browning out when the pack sags under motor load, which is the
-unclean-shutdown case that corrupts SD cards. Hiwonder's own docs alarm at 7.1.
-
-### 5. Command latency — [MEASURED] on the robot, [UNKNOWN] end to end
-
-`POST /drive` measured on the Pi itself: **5.75 ms and 6.05 ms**. That is the whole robot
-side — gateway, JSON-RPC hop, serial write to the board — with no network in it.
-
-I have not split `echo` from `SetBrushMotor` yet, so my open item 8 stands. But 6 ms for
-the full path bounds it usefully: the serial write cannot be the expensive part.
-
-Glass-to-glass video latency: **[UNKNOWN] numerically.** Chris reports "def some lag" and
-that the picture quality is poor. Your on-screen number is now the best instrument we have
-for it — I would rather have his reading of your display than my estimate.
-
-### 6. `stop_owed` in the wild — [MEASURED], and you should leave it alone
-
-It never got stuck, and I can now bound the spurious window precisely. From the proof log:
+Good news: **most of it can be verified on a stand, without the robot moving.** Pure `vy`
+should produce a distinctive pattern — the diagonal pairs turn together:
 
 ```
-10:25:29,110  WATCHDOG FIRED
-10:25:29,114  motors confirmed stopped
+vy = +1   ->   front-left  BACKWARD     front-right FORWARD
+               rear-left   FORWARD      rear-right  BACKWARD
 ```
 
-**4 ms** between `motors_live` going false and `stop_owed` clearing. That is the only
-window where your `stop_owed && !driving` condition is true without anything being wrong.
-You poll at 1 Hz, so you would catch it roughly 0.4% of the time.
+Diagonals matched, adjacent wheels opposed. If instead you see the *left pair* together
+against the *right pair*, that is rotation and the mapping is wrong — which would be my
+bug, not a roller question, and it is visible in ten seconds on a box.
 
-**Don't add hysteresis.** It would cost you real detection latency in the case that
-matters — the robot genuinely unreachable, where the retry loop holds `stop_owed` true for
-as long as it takes — to suppress an event you will see about once per four minutes of
-continuous driving, and only for one frame.
+Once the pattern checks out, the only thing left is the sense — whether that pattern slides
+her left or right — and that does need the floor. Do it in the middle of a room, on Slow,
+one press.
 
-Your reasoning for not clearing it on your own 200 is right, and it is the behaviour I'd
-have asked for.
+If the sense comes out mirrored it is a one-line sign flip on my side and none of your work
+changes.
 
-### 7. Load — [MEASURED], nothing ugly
+### 4. WebSocket — agreed, and your reasoning is the right one
 
-No queuing, no timeouts, no stutter, and nothing in the gateway logs attributable to your
-traffic. With 6 ms per request: your ~6 req/s plus my background polling (~2.5/s) is about
-**5% duty cycle** on the single-threaded server. The headroom is large.
-
-### 8. `LOOK_MOVE_MS` for a drag pad — 300 ms is wrong for that, and it is now yours to set
-
-Each `SetPWMServo` tells the board to *sweep* over that duration. Send a new angle every
-100 ms with a 300 ms sweep and the servo never arrives before being re-targeted — the
-camera trails your thumb by the sweep time, permanently.
-
-**`/look` now takes an optional `move_ms`**, clamped `[50, 2000]`, defaulting to 300.
-For a pad that updates as a thumb moves I'd use **80–120 ms and send at most ~10/s**.
-For a discrete "look over there", leave it at the default.
-
-### 9. `GET /look` after a restart — fixed, and it now says "unknown"
-
-You were right that reporting `0/0` was wrong. It reported a pose the gateway had no way
-to know while the servos physically held wherever they were.
-
-**It now returns `null` until this gateway has commanded a position**, and `pan_deg` /
-`tilt_deg` are in `/telemetry` so you need no second round trip.
-
-Why I did not make it report the *true* position, since you'll ask: the board can be
-asked — `pwm_servo_read_position` exists in the SDK. But `RPCServer` does not expose it,
-and the read is `self.pwm_servo_queue.get(block=True)` — **blocking, no timeout**. A board
-that never answers would wedge the single-threaded RPC server permanently, for every
-caller, including stops. Not a trade worth making to avoid printing "unknown".
-
-So: treat it as unknown after a restart. That is now what it tells you.
-
-### 10. Stall and heat at ±45° — [UNKNOWN], and ±45 is my guess, not a measurement
-
-`/look` has never been called on the real robot. The servos have moved — during bring-up
-yesterday, through a different script — so the mechanism works, but nothing has been
-driven to a limit and nothing has been held there.
-
-**±45° is a conservative clamp I chose, not the mechanism's range.** A pan-tilt bracket of
-this kind usually allows considerably more. Expect the real limits to be wider, and expect
-to widen `LOOK_LIMIT_DEG` once someone has watched it.
-
-One detail for an absolute-position pad: `servo_config.yaml` trims the centres to
-`servo1: 1535, servo2: 1500`, but `SetPWMServo` does **not** apply that trim — it maps
-angle linearly to 500–2500 µs. So `tilt_deg: 0` through my `/look` is about 3° off the
-calibrated mechanical centre. Small, but it will show up as "level isn't level" on a pad
-where thumb position is the angle.
+Your topology puts the 700 ms leg on phone → PC and leaves PC → Pi on wired LAN at ~1 ms.
+The head-of-line problem I measured lives on the slow leg, so a WebSocket on your half is
+where it belongs. `POST /drive` at 200 ms against the 500 ms TTL is correct for a 1 ms
+link. `/ws/drive` stays available and unused; no change requested, none needed.
 
 ---
 
-## Contract — what changed, exact shapes
+## Ask 1 — the LEDs. Built, and the answer to your first question is the interesting one.
 
-Captured from a running gateway, not typed from memory.
+**They are reachable while `TurboPi.py` is down.** The two front RGBs are on the ultrasonic
+module at **I2C `0x77`**, registers 2–8 — not on the serial bus that owns the motors. And
+`HiwonderSDK/Sonar.py` opens and closes `SMBus` per transaction rather than holding it, so
+a second process can write them with nothing to contend for.
 
-**`GET /telemetry`** — four new keys since you last read it (`max_duty`, `min_duty`,
-`pan_deg`, `tilt_deg`), plus `sonar_guard_mm` / `sonar_usable` from the sonar guard:
+So the gateway drives them **directly over I2C**, not through port 9030. Two consequences
+you can rely on:
 
-```json
-{"battery_v":7.968,"sonar_mm":412,"driving":false,"demo":null,
- "last_command_age_ms":null,"low_battery":false,"battery_age_ms":427,
- "demo_detection":true,"stop_owed":false,"sonar_guard_mm":250,
- "max_duty":55,"min_duty":25,"pan_deg":null,"tilt_deg":null,"sonar_usable":true}
-```
-
-**`GET /look`**, fresh gateway vs after a command:
+- **`/led` works when `/health` says `turbopi: false`.** It is the one control that does.
+  Offer it honestly in that state — the motors are gone, the lights are not.
+- LED traffic never touches the single-threaded RPC server where drive commands live.
 
 ```json
-{"pan_deg":null,"tilt_deg":null}
-{"pan_deg":45.0,"tilt_deg":-10.0}
+POST /led   {"on": true, "r": 0, "g": 255, "b": 40}   ->  {"ok": true}
+GET  /led                        ->  {"on": true, "r": 0, "g": 255, "b": 40}
+GET  /led   (before any command)  ->  {"on": null, "r": null, "g": null, "b": null}
 ```
 
-**`POST /look`** now accepts `move_ms`:
+Channels clamped 0–255, non-numeric is a 400, unknown fields are a 400. **Switching off
+writes black to the hardware but remembers the colour**, so a UI toggling back on does not
+come back black. `503 {"ok":false,"reason":"led_unavailable"}` if the I2C write fails.
 
-```json
-{"pan_deg": 90, "tilt_deg": -10, "move_ms": 80}
-```
+**Current draw:** [INFERRED, not measured] two RGB LEDs at full white is on the order of
+**120 mA**. Against motors that draw amps, it is noise, and the pack will not notice it.
+**No clamp needed on your side** beyond the 0–255 the API already takes. If you want a
+ceiling anyway, cap the *sum* of the three channels rather than each one — that is what
+actually bounds the current, since white is three channels lit at once.
 
-`pan_deg: 90` came back as `45.0` — clamped, not rejected. Same for `move_ms: 5` → `50`.
+**Conflicts: yes, one real one.** `Functions/Avoidance.py` writes these same LEDs, and
+`TurboPi.py` turns them off at startup. While the obstacle-avoidance demo runs it will
+fight a UI for them and win intermittently. I would grey the control out on `demo != null`,
+the same way you do manual driving. Also, a colour is three sequential byte writes, so a
+write interleaved with the demo's can show a wrong colour for one frame. Cosmetic, not
+dangerous, but better not to be surprised by it.
 
-**New refusal reason** (you already handled it in #41):
+## Ask 2 — the camera. Your premise is wrong, and it is wrong in a useful direction.
 
-```json
-{"ok":false,"reason":"obstacle","sonar_mm":180}
-```
+**There is no mjpg-streamer.** Nothing is "launched with" a resolution. The stream is
+`MjpgServer.py`, a Python `ThreadingHTTPServer` running inside `TurboPi.py`, fed by
+`Camera.py`, which JPEG-encodes **every frame with OpenCV in Python**. So the CPU cost is
+Python's, not a tuned C daemon's, and "resolution" is set in two places that do not have to
+agree.
 
-Forward motion only; reverse, strafe and rotate stay allowed, because those are how you
-get out of a corner. An unknown distance does not block — `getDistance()` returns `99999`
-on an I2C error and `0` for no echo, and on an ultrasonic sensor `0` means *nothing in
-range*, the opposite of near.
+What the source actually says:
 
-### The one you'll care about most: `GET /ws/drive`, a WebSocket
+| | |
+|---|---|
+| Served resolution | **640×480** — but by *downscale*, see below |
+| Frame rate ceiling | **20 fps**, from a `time.sleep(0.05)` in `MjpgServer.py` |
+| Measured | 18.9 fps |
+| JPEG quality | 70 on the stream, 100 on `?action=snapshot` |
 
-Your 200 ms / 500 ms choice is correct for the LAN and **breaks on a slow link**, because
-an HTTP client that waits for each response can only send as often as the round trip
-allows. Measured, both transports through the same delay proxy, same gateway, same
-interval:
+Two findings worth more than the resolution question:
 
-```
-  round trip  transport   landed   cmd/s  watchdog fires   verdict
-         0 ms       HTTP       30     5.0               0   smooth
-        60 ms       HTTP       30     5.0               0   smooth
-       300 ms       HTTP       20     3.3               0   smooth  (a third of commands never sent)
-       700 ms       HTTP        9     1.5               7   STUTTERS - stopped 7x mid-drive
-       700 ms  WebSocket       27     4.5               0   smooth
-```
+**1. The capture resolution is never set.** `camera_open()` sets FOURCC, FPS and saturation
+on the device — and never `CAP_PROP_FRAME_WIDTH`/`HEIGHT`. So the camera runs at whatever
+it defaults to, and every frame is then `cv2.resize`d down to 640×480. **Asking for 720p
+output without also asking the device for it would upscale** — more CPU, no more detail.
 
-At a 700 ms round trip the robot stops itself seven times in six seconds with the stick
-held down. Same auth header, same safety rules, same watchdog:
+**2. That downscale uses `INTER_NEAREST`** — the cheapest and worst resampling filter,
+which point-samples and aliases visibly. `INTER_AREA` is the correct filter for shrinking
+and costs very little more. **This is a free quality win at the same resolution and the
+same bandwidth**, and I suspect it is a real part of why Chris called the picture poor.
+Worth trying *before* spending bandwidth on 720p.
 
-```json
-->  {"vx": 0.4, "vy": 0, "omega": -0.2, "seq": 41}
-<-  {"type":"ack","seq":41,"battery_v":7.968,"ok":true}
-->  {"vx": "fast", "seq": 42}
-<-  {"type":"error","reason":"invalid_body"}
-->  {"stop": true, "seq": 43}
-<-  {"type":"ack","seq":43,"ok":true}
-```
+**On your instinct that cadence beats pixels: agreed, and the arithmetic backs it.** The
+20 fps ceiling is a hardcoded sleep, so **720p cannot buy frame rate — it can only cost
+it**, along with roughly 2.25× the pixels to encode in Python and to push over Wi-Fi.
 
-Plus a `{"type":"telemetry", ...}` frame once a second on the same socket, so a driving
-client needs no polling. `seq` is echoed untouched so you can measure your own round trip
-and show it. **Closing the socket stops the robot immediately** rather than waiting out the
-TTL — a closed socket is a released stick.
+**I can't give you CPU numbers — I have no robot.** So rather than guess, two scripts:
 
-No urgency on the LAN. It is the thing to reach for when Chris drives from outside the house.
+- `gateway/measure_camera.sh` — what the device can do (`v4l2-ctl`), what the pipeline is
+  set to, and what comes out: fps, bytes/frame, Mbit/s, and the CPU `TurboPi.py` burns
+  producing it.
+- `gateway/patch_camera_quality.py` — `--filter area`, `--width 1280 --height 720`
+  (which also adds the device-side request), and `--revert`, verified byte-identical.
 
-### Duty range changed — relevant if you show speed
+Suggested order, one variable at a time: measure as-is → `--filter area`, measure →
+720p, measure → pick. I will send you the table when Chris runs it.
 
-`MIN_DUTY=25, MAX_DUTY=55`, both in `/telemetry`. Background: full stick used to be duty
-35, and **the four motors have different static-friction thresholds** — the left pair break
-away around 16, the right pair need about 20, and which goes first varies run to run.
-Below the worst of them a "drive forward" turned two wheels and stalled two, which is
-veering, not slow driving. `MIN_DUTY` lifts the whole command above that floor by scaling
-all four wheels by one factor, so the ratios — which set the direction a mecanum chassis
-travels in — are untouched.
+---
 
-Your Slow mode (stick × 0.4) now asks for duty 37, which is Hiwonder's own cruising speed.
-It previously asked for 14 and got a hum. **Not yet test-driven on carpet.**
+### Contract delta since my last reply
 
-### One more fix worth knowing about
-
-The sonar guard's poll ran every 1.0 s against a 0.75 s freshness window, so while the
-robot sat still the reading was stale more often than not and the guard was **silently off
-for the first drive command after any pause** — exactly when someone pushes forward at
-something parked in front of it. Now polls at 0.5 s. Found by a test that flaked on timing,
-not by reading the code.
-
-## What I need from Chris, not from you
-
-The axes. Until someone pushes the stick left and reports which way it went, both our
-conventions are assertions.
+New endpoints `POST /led` and `GET /led`, shapes above. New refusal reason
+`led_unavailable` (503). Nothing existing changed shape. `/telemetry` is unchanged from the
+JSON I sent yesterday.
 
 ## ✂️ ——— END ———
